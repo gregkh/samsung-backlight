@@ -16,6 +16,7 @@
 #include <linux/pci.h>
 #include <linux/backlight.h>
 #include <linux/fb.h>
+#include <linux/dmi.h>
 
 #define MAX_BRIGHT	0xff
 #define OFFSET		0xf4
@@ -125,9 +126,33 @@ static void remove_video_card(void)
 	pci_device = NULL;
 }
 
+static int dmi_check_cb(const struct dmi_system_id *id)
+{
+	printk(KERN_INFO KBUILD_MODNAME ": found laptop model '%s'\n",
+		id->ident);
+	return 0;
+}
+
+static struct dmi_system_id __initdata samsung_dmi_table[] = {
+	{
+		.ident = "N130",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "N130"),
+			DMI_MATCH(DMI_BOARD_NAME, "N130"),
+		},
+		.callback = dmi_check_cb,
+	},
+	{ },
+};
+
 static int __init samsung_init(void)
 {
 	int retval;
+
+	if (!dmi_check_system(samsung_dmi_table))
+		return -ENODEV;
+
 	retval = pci_register_driver(&samsung_driver);
 	if (retval)
 		return retval;
@@ -149,3 +174,4 @@ MODULE_DESCRIPTION("Samsung N130 Backlight driver");
 MODULE_LICENSE("GPL");
 module_param(offset, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(offset, "The offset into the PCI device for the brightness control");
+MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnN130:*:rnN130:*");
