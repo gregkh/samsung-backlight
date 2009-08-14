@@ -1,5 +1,5 @@
 /*
- * Samsung N130 Laptop Backlight driver
+ * Samsung N130 and NC10 Laptop Backlight driver
  *
  * Copyright (C) 2009 Greg Kroah-Hartman (gregkh@suse.de)
  * Copyright (C) 2009 Novell Inc.
@@ -49,8 +49,6 @@ static int update_status(struct backlight_device *bd)
 {
 	if (!pci_device)
 		return -ENODEV;
-	if (!backlight_device)
-		return -ENODEV;
 
 	current_brightness = bd->props.brightness;
 	set_brightness();
@@ -67,13 +65,17 @@ static int find_video_card(void)
 	struct pci_dev *dev = NULL;
 
 	while ((dev = pci_get_device(0x8086, 0x27ae, dev)) != NULL) {
-		/* Found one, so let's save it off */
-		if (!pci_device)
-			pci_device = pci_dev_get(dev);
+		/*
+		 * Found one, so let's save it off and break
+		 * Note that the reference is still raised on
+		 * the PCI device here.
+		 */
+		pci_device = dev;
+		break;
 	}
 
 	if (!pci_device)
-		return 0;
+		return -ENODEV;
 
 	/* create a backlight device to talk to this one */
 	backlight_device = backlight_device_register("samsung",
@@ -148,7 +150,7 @@ module_init(samsung_init);
 module_exit(samsung_exit);
 
 MODULE_AUTHOR("Greg Kroah-Hartman <gregkh@suse.de>");
-MODULE_DESCRIPTION("Samsung N130 Backlight driver");
+MODULE_DESCRIPTION("Samsung Backlight driver");
 MODULE_LICENSE("GPL");
 module_param(offset, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(offset, "The offset into the PCI device for the brightness control");
