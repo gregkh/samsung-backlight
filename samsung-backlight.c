@@ -14,8 +14,16 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/backlight.h>
+#include <linux/fb.h>
 
-static struct pci_dev *device;
+#define MAX_BRIGHT	0xff
+#define OFFSET		0xf4
+
+static struct pci_dev *pci_device;
+static struct backlight_device *backlight_device;
+static int offset = OFFSET;
+static u8 current_brightness;
 
 static struct pci_device_id samsung_ids[] = {
 	{ PCI_DEVICE(0x8086, 0x27ae) },
@@ -39,17 +47,82 @@ static struct pci_driver samsung_driver = {
 	.remove		= remove,
 };
 
+static void read_brightness(void)
+{
+	if (!pci_device)
+		return;
+	pci_read_config_byte(pci_device, offset, &current_brightness);
+}
+
+static void set_brightness(void)
+{
+	if (!pci_device)
+		return;
+	pci_write_config_byte(pci_device, offset, current_brightness);
+}
+
+
+static int get_brightness(struct backlight_device *bd)
+{
+	return bd->props.brightness;
+}
+
+static int update_status(struct backlight_device *bd)
+{
+	if (!pci_device)
+		return -ENODEV;
+	if (!backlight_device)
+		return -ENODEV;
+
+	current_brightness = bd->props.brightness;
+	set_brightness();
+	return 0;
+}
+
+static struct backlight_ops backlight_ops = {
+	.get_brightness	= get_brightness,
+	.update_status	= update_status,
+};
+
 
 static int find_video_card(void)
 {
+	struct pci_dev *dev = NULL;
 
+	while ((dev = pci_get_device(0x8086, 0x27ae, dev)) != NULL) {
+		/* Found one, so let's save it off */
+		if (!pci_device)
+			pci_device = pci_dev_get(dev);
+	}
+
+	if (!pci_device)
+		return 0;
+
+	/* create a backlight device to talk to this one */
+	backlight_device = backlight_device_register("samsung",
+						     &pci_device->dev,
+						     NULL, &backlight_ops);
+	if (IS_ERR(backlight_device))
+		return PTR_ERR(backlight_device);
+	read_brightness();
+	backlight_device->props.max_brightness = MAX_BRIGHT;
+	backlight_device->props.brightness = current_brightness;
+	backlight_device->props.power = FB_BLANK_UNBLANK;
+	backlight_update_status(backlight_device);
 	return 0;
 }
 
 static void remove_video_card(void)
 {
-	if (!device)
+	if (!pci_device)
 		return;
+
+	backlight_device_unregister(backlight_device);
+	backlight_device = NULL;
+
+	/* we are done with the PCI device, put it back */
+	pci_dev_put(pci_device);
+	pci_device = NULL;
 }
 
 static int __init samsung_init(void)
@@ -74,3 +147,5 @@ module_exit(samsung_exit);
 MODULE_AUTHOR("Greg Kroah-Hartman <gregkh@suse.de>");
 MODULE_DESCRIPTION("Samsung N130 Backlight driver");
 MODULE_LICENSE("GPL");
+module_param(offset, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(offset, "The offset into the PCI device for the brightness control");
