@@ -26,28 +26,6 @@ static struct backlight_device *backlight_device;
 static int offset = OFFSET;
 static u8 current_brightness;
 
-static struct pci_device_id samsung_ids[] = {
-	{ PCI_DEVICE(0x8086, 0x27ae) },
-	{ },
-};
-MODULE_DEVICE_TABLE(pci, samsung_ids);
-
-static int probe(struct pci_dev *pci_dev, const struct pci_device_id *id)
-{
-	return -ENODEV;
-}
-
-static void remove(struct pci_dev *pci_dev)
-{
-}
-
-static struct pci_driver samsung_driver = {
-	.name		= "samsung-backlight",
-	.id_table	= samsung_ids,
-	.probe		= probe,
-	.remove		= remove,
-};
-
 static void read_brightness(void)
 {
 	if (!pci_device)
@@ -61,7 +39,6 @@ static void set_brightness(void)
 		return;
 	pci_write_config_byte(pci_device, offset, current_brightness);
 }
-
 
 static int get_brightness(struct backlight_device *bd)
 {
@@ -84,7 +61,6 @@ static struct backlight_ops backlight_ops = {
 	.get_brightness	= get_brightness,
 	.update_status	= update_status,
 };
-
 
 static int find_video_card(void)
 {
@@ -148,21 +124,14 @@ static struct dmi_system_id __initdata samsung_dmi_table[] = {
 
 static int __init samsung_init(void)
 {
-	int retval;
-
 	if (!dmi_check_system(samsung_dmi_table))
 		return -ENODEV;
-
-	retval = pci_register_driver(&samsung_driver);
-	if (retval)
-		return retval;
 
 	return find_video_card();
 }
 
 static void __exit samsung_exit(void)
 {
-	pci_unregister_driver(&samsung_driver);
 	remove_video_card();
 }
 
