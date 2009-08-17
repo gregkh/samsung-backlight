@@ -27,9 +27,9 @@
  * overkill, that's fine.  So let's map the 256 values to 8 different ones:
  *
  * userspace	0    1    2    3    4    5    6    7
- * hardware	0   31   63   95  127  159  191  255
+ * hardware	0   36   72  108  144  180  216  252
  *
- * or hardware = (userspace * 32) - 1 iff userspace != 0
+ * or hardware = (userspace * 36) - 1 iff userspace != 0
  */
 
 
@@ -47,7 +47,7 @@ static u8 read_brightness(void)
 
 	pci_read_config_byte(pci_device, offset, &kernel_brightness);
 	if (kernel_brightness != 0)
-		user_brightness = kernel_brightness / 32;
+		user_brightness = kernel_brightness / 36;
 
 	return user_brightness;
 }
@@ -57,7 +57,7 @@ static void set_brightness(u8 user_brightness)
 	u16 kernel_brightness = 0;
 
 	if (user_brightness != 0)
-		kernel_brightness = (user_brightness * 32) - 1;
+		kernel_brightness = (user_brightness * 36) - 1;
 	pci_write_config_byte(pci_device, offset, (u8)kernel_brightness);
 }
 
