@@ -17,6 +17,7 @@
 #include <linux/backlight.h>
 #include <linux/fb.h>
 #include <linux/dmi.h>
+#include <linux/platform_device.h>
 
 /*
  * We have 0 - 8 as valid brightness levels.  The specs say that level 0 should
@@ -66,6 +67,7 @@ static struct sabi_interface __iomem *sabi_iface;
 static void __iomem *f0000_segment;
 static struct backlight_device *backlight_device;
 static struct mutex sabi_mutex;
+static struct platform_device *sdev;
 
 static int force;
 module_param(force, bool, 0);
@@ -320,8 +322,13 @@ static int __init samsung_init(void)
 	if (!retval)
 		printk("cpu temp = 0x%02x\n", sretval.retval[0]);
 
+	/* knock up a platform device to hang stuff off of */
+	sdev = platform_device_register_simple("samsung", -1, NULL, 0);
+	if (IS_ERR(sdev))
+		goto error_no_platform;
+
 	/* create a backlight device to talk to this one */
-	backlight_device = backlight_device_register("samsung", NULL,
+	backlight_device = backlight_device_register("samsung", &sdev->dev,
 						     NULL, &backlight_ops);
 	if (IS_ERR(backlight_device))
 		goto error_no_backlight;
@@ -335,6 +342,9 @@ exit:
 	return 0;
 
 error_no_backlight:
+	platform_device_unregister(sdev);
+
+error_no_platform:
 	iounmap(sabi_iface);
 
 error_no_signature:
@@ -347,6 +357,7 @@ static void __exit samsung_exit(void)
 	backlight_device_unregister(backlight_device);
 	iounmap(sabi_iface);
 	iounmap(f0000_segment);
+	platform_device_unregister(sdev);
 }
 
 module_init(samsung_init);
