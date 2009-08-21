@@ -60,10 +60,9 @@ struct sabifuncio {
 	u8 data[20];
 } __attribute__((packed));
 
-static struct sabi_header *sabi;
-static struct sabi_interface *iface;
-static unsigned int ifaceP=0;
-static char *unmap1;
+static struct sabi_header __iomem *sabi;
+static struct sabi_interface __iomem *iface;
+static void __iomem *unmap1;
 static int sabisupport = 0;
 
 static int offset = OFFSET;
@@ -136,11 +135,64 @@ static struct dmi_system_id __initdata samsung_dmi_table[] = {
 	{ },
 };
 
+
+#define SABI_GET_MODEL			0x04
+#define SABI_GET_BRIGHTNESS		0x10
+#define SABI_SET_BRIGHTNESS		0x11
+#define SABI_GET_WIRELESS_BUTTON	0x12
+#define SABI_SET_WIRELESS_BUTTON	0x13
+#define SABI_GET_BACKLIGHT		0x2d
+#define SABI_SET_BACKLIGHT		0x2e
+#define SABI_GET_ETIQUETTE_MODE		0x31
+#define SABI_SET_ETIQUETTE_MODE		0x32
+
+struct sabi_retval {
+	u8 retval[4];
+};
+
+static int sabi_get_command(u8 command, struct sabi_retval *sretval)
+{
+	/* enable memory to be able to write to it */
+	outb(readb(&sabi->enMem), readw(&sabi->portNo));
+
+	/* write out the command */
+	writew(0x5843, &iface->mainfunc);
+	writew(command, &iface->subfunc);
+	writeb(0, &iface->complete);
+	outb(readb(&sabi->ifaceFunc), readw(&sabi->portNo));
+
+	/* sleep for a bit to let the command complete */
+	msleep(100);
+
+	/* write protect memory to make it safe */
+	outb(readb(&sabi->reMem), readw(&sabi->portNo));
+
+	/* see if the command actually succeeded */
+	if (readb(&iface->complete) == 0xaa && readb(&iface->retval[0]) != 0xff) {
+		/* it did! */
+		/* save off the data into a structure */
+		sretval->retval[0] = readb(&iface->retval[0]);
+		sretval->retval[1] = readb(&iface->retval[1]);
+		sretval->retval[2] = readb(&iface->retval[2]);
+		sretval->retval[3] = readb(&iface->retval[3]);
+		return 0;
+	}
+
+	/* Something bad happened, so report it and error out */
+	printk(KERN_WARNING "SABI command 0x%02x failed with completion flag 0x%02x and output 0x%02x\n",
+		command, readb(&iface->complete), readb(&iface->retval[0]));
+	return -EINVAL;
+}
+
 static int __init samsung_init(void)
 {
-	char *memcheck;
+	void __iomem *memcheck;
 	char *testStr = "SwSmi@";
+	unsigned int ifaceP;
 	int pStr,loca,te;
+	struct sabi_retval sretval;
+	int retval;
+
 
 	if (!dmi_check_system(samsung_dmi_table))
 		return -ENODEV;
@@ -174,12 +226,15 @@ static int __init samsung_init(void)
 //	return 0;
 
 
-	pStr=0;
+	pStr = 0;
 	memcheck = ioremap(0xf0000, 0xffff);
 	unmap1 = memcheck;
-	for (loca=0; loca < 0xffff; loca++) {
-		if (*(testStr + pStr) == *(memcheck+loca)) {
-			printk("%c",*(memcheck+loca));
+	for (loca = 0; loca < 0xffff; loca++) {
+		char temp = readb(memcheck + loca);
+
+//		if (*(testStr + pStr) == *(memcheck+loca)) {
+		if (temp == testStr[pStr]) {
+			printk("%c", temp);
 
 			if (pStr == 5) {
 				printk("\n");
@@ -190,48 +245,102 @@ static int __init samsung_init(void)
 			pStr = 0;
 		}
 	}
-	if (loca == 0xffff){
+	if (loca == 0xffff) {
 		printk(KERN_INFO "This computer does not support SABI\n");
 		sabisupport = 0;
-	} else {
-		loca += 1; /*pointing SMI port Number*/
-		sabisupport = 1;
-		sabi = (struct sabi_header *)(loca+memcheck);
-		ifaceP += ((sabi->dataSegment) & 0x0ffff) << 4;
-		ifaceP += (sabi->dataOffset) & 0x0ffff;
-		outb(sabi->enMem, sabi->portNo);
-		iface = (struct sabi_interface *)ioremap(ifaceP, 16);
-		printk("%x\n", (unsigned int)iface);
-		if (iface != 0) {
-			iface->mainfunc=0x5843;
-			iface->subfunc=4;
-			iface->complete=0;
-			outb(sabi->ifaceFunc, sabi->portNo);
-			for(te=0;te<10000;te++)
-				;
+		goto exit;
 		}
-		//sleep needed
-		outb(sabi->reMem, sabi->portNo);
-		if (iface !=0 && iface->complete == 0xaa && iface->retval[0] != 0xff) {
-			printk("%c%c%c%c\n",
-				(iface->retval)[0],
-				(iface->retval)[1],
-				(iface->retval)[2],
-				(iface->retval)[3]);
-			iounmap(iface);
-		}
-//		#ifdef TIKADEBUG
-		printk("This computer supports SABI==%x\n",loca+0xf0000-6);
-		printk("address segment %x,offset %x\n",sabi->dataSegment,sabi->dataOffset);
-		printk("%x,%x --> iface address\n",(unsigned int)ifaceP,(unsigned int)iface);
-		printk("%x,%x",0x01&0x02,0x01&&0x02);
-		printk("function port %x,next 3 value is %x,%x,%x\n",sabi->portNo,sabi->ifaceFunc,sabi->enMem,sabi->reMem);
-//		#endif
+
+	loca += 1; /*pointing SMI port Number*/
+	sabisupport = 1;
+	sabi = (struct sabi_header __iomem *)(loca + memcheck);
+	if (!sabi) {
+		printk(KERN_ERR "Can't remap %p\n", loca + memcheck);
+		goto exit;
 	}
 
+	printk(KERN_INFO "This computer supports SABI==%x\n", loca + 0xf0000 - 6);
+	printk(KERN_INFO "SABI header:\n");
+	printk(KERN_INFO " SMI Port Number = 0x%04x\n", readw(&sabi->portNo));
+	printk(KERN_INFO " SMI Interface Function = 0x%02x\n", readb(&sabi->ifaceFunc));
+	printk(KERN_INFO " SMI enable memory buffer = 0x%02x\n", readb(&sabi->enMem));
+	printk(KERN_INFO " SMI restore memory buffer = 0x%02x\n", readb(&sabi->reMem));
+	printk(KERN_INFO " SABI data offset = 0x%04x\n", readw(&sabi->dataOffset));
+	printk(KERN_INFO " SABI data segment = 0x%04x\n", readw(&sabi->dataSegment));
+	printk(KERN_INFO " BIOS interface version = 0x%02x\n", readb(&sabi->BIOSifver));
+	printk(KERN_INFO " KBD Launcher string = 0x%02x\n", readb(&sabi->LauncherString));
+
+	ifaceP = (readw(&sabi->dataSegment) & 0x0ffff) << 4;
+	ifaceP += readw(&sabi->dataOffset) & 0x0ffff;
+	iface = (struct sabi_interface __iomem *)ioremap(ifaceP, 16);
+	if (!iface) {
+		printk(KERN_ERR "Can't remap %x\n", ifaceP);
+		goto exit;
+	}
+	printk("SABI Interface = %p\n", iface);
+
+	retval = sabi_get_command(SABI_GET_MODEL, &sretval);
+	if (!retval) {
+		printk("SABI Model %c%c%c%c\n",
+			sretval.retval[0],
+			sretval.retval[1],
+			sretval.retval[2],
+			sretval.retval[3]);
+	}
+
+	retval = sabi_get_command(SABI_GET_BACKLIGHT, &sretval);
+	if (!retval)
+		printk("backlight = 0x%02x\n", sretval.retval[0]);
+
+	retval = sabi_get_command(SABI_GET_WIRELESS_BUTTON, &sretval);
+	if (!retval)
+		printk("wireless button = 0x%02x\n", sretval.retval[0]);
+
+	retval = sabi_get_command(SABI_GET_BRIGHTNESS, &sretval);
+	if (!retval)
+		printk("brightness = 0x%02x\n", sretval.retval[0]);
+
+	retval = sabi_get_command(SABI_GET_ETIQUETTE_MODE, &sretval);
+	if (!retval)
+		printk("etiquette mode = 0x%02x\n", sretval.retval[0]);
+
+	/* read model number */
+	outb(readb(&sabi->enMem), readw(&sabi->portNo));
+	writew(0x5843, &iface->mainfunc);
+	writew(4, &iface->subfunc);
+	writeb(0, &iface->complete);
+	outb(readb(&sabi->ifaceFunc), readw(&sabi->portNo));
+	for(te=0;te<10000;te++)
+		;
+	/* long enough? */
+	msleep(100);
+	outb(readb(&sabi->reMem), readw(&sabi->portNo));
+	if (readb(&iface->complete) == 0xaa && readb(&iface->retval[0]) != 0xff) {
+		printk("Model %c%c%c%c\n",
+			readb(&iface->retval[0]),
+			readb(&iface->retval[1]),
+			readb(&iface->retval[2]),
+			readb(&iface->retval[3]));
+	}
+
+	/* read backlight value, 0-8 */
+	outb(readb(&sabi->enMem), readw(&sabi->portNo));
+	writew(0x5843, &iface->mainfunc);
+	writew(0x10, &iface->subfunc);
+	writeb(0, &iface->complete);
+	outb(readb(&sabi->ifaceFunc), readw(&sabi->portNo));
+	msleep(100);
+
+	outb(readb(&sabi->reMem), readw(&sabi->portNo));
+
+	if (readb(&iface->complete) == 0xaa && readb(&iface->retval[0]) != 0xff) {
+		printk(KERN_INFO "backlight=%d\n", readb(&iface->retval[0]));
+	}
+
+
+
+exit:
 	return 0;
-
-
 }
 
 static void __exit samsung_exit(void)
