@@ -1,5 +1,5 @@
 /*
- * Samsung N130 and NC10 Laptop Backlight driver
+ * Samsung N130 and NC120 Laptop driver
  *
  * Copyright (C) 2009 Greg Kroah-Hartman (gregkh@suse.de)
  * Copyright (C) 2009 Novell Inc.
@@ -9,7 +9,6 @@
  * the Free Software Foundation.
  *
  */
-
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
@@ -20,26 +19,66 @@
 #include <linux/platform_device.h>
 
 /*
+ * This driver is needed because a number of Samsung laptops do not hook
+ * their control settings through ACPI.  So we have to poke around in the
+ * BIOS to do things like brightness values, and "special" key controls.
+ */
+
+
+/*
  * We have 0 - 8 as valid brightness levels.  The specs say that level 0 should
  * be reserved by the BIOS (which really doesn't make much sense), we tell
  * userspace that the value is 0 - 7 and then just tell the hardware 1 - 8
  */
-
 #define MAX_BRIGHT	0x07
-#define OFFSET		0xf4
 
-
+/* get model returns 4 characters that describe the model of the laptop */
 #define SABI_GET_MODEL			0x04
+
+/* Brightness is 0 - 8, as described above.  Value 0 is for the BIOS to use */
 #define SABI_GET_BRIGHTNESS		0x10
 #define SABI_SET_BRIGHTNESS		0x11
+
+/* 0 is off, 1 is on, and 2 is a second user-defined key? */
 #define SABI_GET_WIRELESS_BUTTON	0x12
 #define SABI_SET_WIRELESS_BUTTON	0x13
+
+/* Temperature is returned in degress Celsius from what I can guess. */
 #define SABI_GET_CPU_TEMP		0x29
+
+/* 0 is off, 1 is on.  Doesn't seem to work on a N130 for some reason */
 #define SABI_GET_BACKLIGHT		0x2d
 #define SABI_SET_BACKLIGHT		0x2e
+
+/*
+ * This is different
+ * There is 3 different modes here:
+ *   0 - off
+ *   1 - on
+ *   2 - max performance mode
+ * off is "normal" mode.
+ * on means that whatever the bios setting for etiquette mode, is enabled.  It
+ * seems that the BIOS can set either "auto" mode, or "slow" mode.  If "slow"
+ * mode is set, the fan turns off, and the cpu is throttled down to not cause
+ * the fan to turn on if at all possible.
+ * max performance means that the processor can be overclocked and run faster
+ * then is physically possible.  Ok, maybe not physically possible, but it is
+ * overclocked.  Funny that the system has a setting for this...
+ */
 #define SABI_GET_ETIQUETTE_MODE		0x31
 #define SABI_SET_ETIQUETTE_MODE		0x32
 
+/*
+ * I imagine that on some laptops there is a bluetooth switch, but I don't know
+ * what that looks like, or where it is in the BIOS address space
+ */
+
+
+/*
+ * SABI HEADER in low memory (f0000)
+ * We need to poke through memory to find a signature in order to find the
+ * exact location of this structure.
+ */
 struct sabi_header {
 	u16 portNo;
 	u8 ifaceFunc;
@@ -51,6 +90,11 @@ struct sabi_header {
 	u8 LauncherString;
 } __attribute__((packed));
 
+/*
+ * The SABI interface that we use to write and read values from the system.
+ * It is found by looking at the dataOffset and dataSegment values in the sabi
+ * header structure
+ */
 struct sabi_interface {
 	u16 mainfunc;
 	u16 subfunc;
@@ -58,8 +102,9 @@ struct sabi_interface {
 	u8 retval[20];
 } __attribute__((packed));
 
+/* Structure to get data back to the calling function */
 struct sabi_retval {
-	u8 retval[4];
+	u8 retval[20];
 };
 
 static struct sabi_header __iomem *sabi;
@@ -101,8 +146,13 @@ static int sabi_get_command(u8 command, struct sabi_retval *sretval)
 	/* see if the command actually succeeded */
 	if (readb(&sabi_iface->complete) == 0xaa &&
 	    readb(&sabi_iface->retval[0]) != 0xff) {
-		/* it did! */
-		/* save off the data into a structure */
+		/*
+		 * It did!
+		 * Save off the data into a structure so the caller use it.
+		 * Right now we only care about the first 4 bytes,
+		 * I suppose there are commands that need more, but I don't
+		 * know about them.
+		 */
 		sretval->retval[0] = readb(&sabi_iface->retval[0]);
 		sretval->retval[1] = readb(&sabi_iface->retval[1]);
 		sretval->retval[2] = readb(&sabi_iface->retval[2]);
