@@ -1,4 +1,4 @@
-obj-m	:= samsung-backlight.o
+obj-m	:= samsung-laptop.o
 
 KERNELDIR ?= /lib/modules/$(shell uname -r)/build
 PWD       := $(shell pwd)
