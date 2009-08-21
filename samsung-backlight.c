@@ -66,6 +66,14 @@ static struct sabi_interface __iomem *sabi_iface;
 static void __iomem *f0000_segment;
 static struct backlight_device *backlight_device;
 
+static int force;
+module_param(force, bool, 0);
+MODULE_PARM_DESC(force, "Disable the DMI check and forces the driver to be loaded");
+
+static int debug;
+module_param(debug, bool, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(debug, "Debug enabled or not");
+
 static int sabi_get_command(u8 command, struct sabi_retval *sretval)
 {
 	/* enable memory to be able to write to it */
@@ -209,7 +217,7 @@ static int __init samsung_init(void)
 	int retval;
 
 
-	if (!dmi_check_system(samsung_dmi_table))
+	if (!force && !dmi_check_system(samsung_dmi_table))
 		return -ENODEV;
 
 	f0000_segment = ioremap(0xf0000, 0xffff);
