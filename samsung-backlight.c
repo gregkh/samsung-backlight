@@ -201,13 +201,12 @@ static struct dmi_system_id __initdata samsung_dmi_table[] = {
 
 static int __init samsung_init(void)
 {
+	struct sabi_retval sretval;
+	const char *testStr = "SwSmi@";
 	void __iomem *memcheck;
-	char *testStr = "SwSmi@";
 	unsigned int ifaceP;
 	int pStr,loca;
-	struct sabi_retval sretval;
 	int retval;
-	int i;
 
 
 	if (!dmi_check_system(samsung_dmi_table))
@@ -272,7 +271,7 @@ static int __init samsung_init(void)
 
 	retval = sabi_get_command(SABI_GET_MODEL, &sretval);
 	if (!retval) {
-		printk("SABI Model %c%c%c%c\n",
+		printk("Model Name %c%c%c%c\n",
 			sretval.retval[0],
 			sretval.retval[1],
 			sretval.retval[2],
@@ -282,24 +281,6 @@ static int __init samsung_init(void)
 	retval = sabi_get_command(SABI_GET_BACKLIGHT, &sretval);
 	if (!retval)
 		printk("backlight = 0x%02x\n", sretval.retval[0]);
-	retval = sabi_set_command(SABI_GET_BACKLIGHT, 0x00);
-	retval = sabi_get_command(SABI_GET_BACKLIGHT, &sretval);
-	if (!retval)
-		printk("backlight = 0x%02x\n", sretval.retval[0]);
-	msleep(1000);
-	retval = sabi_set_command(SABI_GET_BACKLIGHT, 0x01);
-	retval = sabi_get_command(SABI_GET_BACKLIGHT, &sretval);
-	if (!retval)
-		printk("backlight = 0x%02x\n", sretval.retval[0]);
-
-	for (i = 0; i < 9; i++) {
-		sabi_set_command(SABI_SET_BRIGHTNESS, i);
-		retval = sabi_get_command(SABI_GET_BRIGHTNESS, &sretval);
-		if (!retval)
-			printk("brightness = 0x%02x\n", sretval.retval[0]);
-		msleep(1000);
-	}
-	sabi_set_command(SABI_SET_BRIGHTNESS, 8);
 
 	retval = sabi_get_command(SABI_GET_WIRELESS_BUTTON, &sretval);
 	if (!retval)
