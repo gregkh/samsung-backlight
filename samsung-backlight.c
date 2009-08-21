@@ -18,23 +18,26 @@
 #include <linux/fb.h>
 #include <linux/dmi.h>
 
+/*
+ * We have 0 - 8 as valid brightness levels.  The specs say that level 0 should
+ * be reserved by the BIOS (which really doesn't make much sense), we tell userspace
+ * that the value is 0 - 7 and then just tell the hardware 1 - 8
+ */
+
 #define MAX_BRIGHT	0x07
 #define OFFSET		0xf4
 
-/*
- * HAL/gnome-display-manager really wants us to only set 8 different levels for
- * the brightness control.  And since 256 different levels seems a bit
- * overkill, that's fine.  So let's map the 256 values to 8 different ones:
- *
- * userspace	 0    1    2    3    4    5    6    7
- * hardware	31   63   95  127  159  195  223  255
- *
- * or hardware = ((userspace + 1) * 32)-1
- *
- * Note, we keep value 0 at a positive value, otherwise the screen goes
- * blank because HAL likes to set the backlight to 0 at startup when there is
- * no power plugged in.
- */
+
+#define SABI_GET_MODEL			0x04
+#define SABI_GET_BRIGHTNESS		0x10
+#define SABI_SET_BRIGHTNESS		0x11
+#define SABI_GET_WIRELESS_BUTTON	0x12
+#define SABI_SET_WIRELESS_BUTTON	0x13
+#define SABI_GET_CPU_TEMP		0x29
+#define SABI_GET_BACKLIGHT		0x2d
+#define SABI_SET_BACKLIGHT		0x2e
+#define SABI_GET_ETIQUETTE_MODE		0x31
+#define SABI_SET_ETIQUETTE_MODE		0x32
 
 struct sabi_header {
 	u16 portNo;
@@ -54,40 +57,100 @@ struct sabi_interface {
 	u8 retval[20];
 } __attribute__((packed));
 
-struct sabifuncio {
-	u16 subfunc;
-	u16 len_data;
-	u8 data[20];
-} __attribute__((packed));
+struct sabi_retval {
+	u8 retval[4];
+};
 
 static struct sabi_header __iomem *sabi;
-static struct sabi_interface __iomem *iface;
-static void __iomem *unmap1;
-static int sabisupport = 0;
-
-static int offset = OFFSET;
-module_param(offset, int, S_IRUGO | S_IWUSR);
-MODULE_PARM_DESC(offset, "The offset into the PCI device for the brightness control");
-
-static struct pci_dev *pci_device;
+static struct sabi_interface __iomem *sabi_iface;
+static void __iomem *f0000_segment;
 static struct backlight_device *backlight_device;
+
+static int sabi_get_command(u8 command, struct sabi_retval *sretval)
+{
+	/* enable memory to be able to write to it */
+	outb(readb(&sabi->enMem), readw(&sabi->portNo));
+
+	/* write out the command */
+	writew(0x5843, &sabi_iface->mainfunc);
+	writew(command, &sabi_iface->subfunc);
+	writeb(0, &sabi_iface->complete);
+	outb(readb(&sabi->ifaceFunc), readw(&sabi->portNo));
+
+	/* sleep for a bit to let the command complete */
+	msleep(100);
+
+	/* write protect memory to make it safe */
+	outb(readb(&sabi->reMem), readw(&sabi->portNo));
+
+	/* see if the command actually succeeded */
+	if (readb(&sabi_iface->complete) == 0xaa &&
+	    readb(&sabi_iface->retval[0]) != 0xff) {
+		/* it did! */
+		/* save off the data into a structure */
+		sretval->retval[0] = readb(&sabi_iface->retval[0]);
+		sretval->retval[1] = readb(&sabi_iface->retval[1]);
+		sretval->retval[2] = readb(&sabi_iface->retval[2]);
+		sretval->retval[3] = readb(&sabi_iface->retval[3]);
+		return 0;
+	}
+
+	/* Something bad happened, so report it and error out */
+	printk(KERN_WARNING "SABI command 0x%02x failed with completion flag 0x%02x and output 0x%02x\n",
+		command, readb(&sabi_iface->complete),
+		readb(&sabi_iface->retval[0]));
+	return -EINVAL;
+}
+
+static int sabi_set_command(u8 command, u8 data)
+{
+	/* enable memory to be able to write to it */
+	outb(readb(&sabi->enMem), readw(&sabi->portNo));
+
+	/* write out the command */
+	writew(0x5843, &sabi_iface->mainfunc);
+	writew(command, &sabi_iface->subfunc);
+	writeb(0, &sabi_iface->complete);
+	writeb(data, &sabi_iface->retval[0]);
+	outb(readb(&sabi->ifaceFunc), readw(&sabi->portNo));
+
+	/* sleep for a bit to let the command complete */
+	msleep(100);
+
+	/* write protect memory to make it safe */
+	outb(readb(&sabi->reMem), readw(&sabi->portNo));
+
+	/* see if the command actually succeeded */
+	if (readb(&sabi_iface->complete) == 0xaa &&
+	    readb(&sabi_iface->retval[0]) != 0xff) {
+		/* it did! */
+		return 0;
+	}
+
+	/* Something bad happened, so report it and error out */
+	printk(KERN_WARNING "SABI command 0x%02x failed with completion flag 0x%02x and output 0x%02x\n",
+		command, readb(&sabi_iface->complete),
+		readb(&sabi_iface->retval[0]));
+	return -EINVAL;
+}
 
 static u8 read_brightness(void)
 {
-	u8 kernel_brightness;
-	u8 user_brightness = 0;
+	struct sabi_retval sretval;
+	int user_brightness = 0;
+	int retval;
 
-	pci_read_config_byte(pci_device, offset, &kernel_brightness);
-	user_brightness = ((kernel_brightness + 1) / 32) - 1;
+	retval = sabi_get_command(SABI_GET_BACKLIGHT, &sretval);
+	if (!retval)
+		user_brightness = sretval.retval[0];
+		if (user_brightness != 0)
+			--user_brightness;
 	return user_brightness;
 }
 
 static void set_brightness(u8 user_brightness)
 {
-	u16 kernel_brightness = 0;
-
-	kernel_brightness = ((user_brightness + 1) * 32) - 1;
-	pci_write_config_byte(pci_device, offset, (u8)kernel_brightness);
+	sabi_set_command(SABI_SET_BRIGHTNESS, user_brightness + 1);
 }
 
 static int get_brightness(struct backlight_device *bd)
@@ -136,90 +199,12 @@ static struct dmi_system_id __initdata samsung_dmi_table[] = {
 };
 
 
-#define SABI_GET_MODEL			0x04
-#define SABI_GET_BRIGHTNESS		0x10
-#define SABI_SET_BRIGHTNESS		0x11
-#define SABI_GET_WIRELESS_BUTTON	0x12
-#define SABI_SET_WIRELESS_BUTTON	0x13
-#define SABI_GET_BACKLIGHT		0x2d
-#define SABI_SET_BACKLIGHT		0x2e
-#define SABI_GET_ETIQUETTE_MODE		0x31
-#define SABI_SET_ETIQUETTE_MODE		0x32
-
-struct sabi_retval {
-	u8 retval[4];
-};
-
-static int sabi_get_command(u8 command, struct sabi_retval *sretval)
-{
-	/* enable memory to be able to write to it */
-	outb(readb(&sabi->enMem), readw(&sabi->portNo));
-
-	/* write out the command */
-	writew(0x5843, &iface->mainfunc);
-	writew(command, &iface->subfunc);
-	writeb(0, &iface->complete);
-	outb(readb(&sabi->ifaceFunc), readw(&sabi->portNo));
-
-	/* sleep for a bit to let the command complete */
-	msleep(100);
-
-	/* write protect memory to make it safe */
-	outb(readb(&sabi->reMem), readw(&sabi->portNo));
-
-	/* see if the command actually succeeded */
-	if (readb(&iface->complete) == 0xaa && readb(&iface->retval[0]) != 0xff) {
-		/* it did! */
-		/* save off the data into a structure */
-		sretval->retval[0] = readb(&iface->retval[0]);
-		sretval->retval[1] = readb(&iface->retval[1]);
-		sretval->retval[2] = readb(&iface->retval[2]);
-		sretval->retval[3] = readb(&iface->retval[3]);
-		return 0;
-	}
-
-	/* Something bad happened, so report it and error out */
-	printk(KERN_WARNING "SABI command 0x%02x failed with completion flag 0x%02x and output 0x%02x\n",
-		command, readb(&iface->complete), readb(&iface->retval[0]));
-	return -EINVAL;
-}
-
-static int sabi_set_command(u8 command, u8 data)
-{
-	/* enable memory to be able to write to it */
-	outb(readb(&sabi->enMem), readw(&sabi->portNo));
-
-	/* write out the command */
-	writew(0x5843, &iface->mainfunc);
-	writew(command, &iface->subfunc);
-	writeb(0, &iface->complete);
-	writeb(data, &iface->retval[0]);
-	outb(readb(&sabi->ifaceFunc), readw(&sabi->portNo));
-
-	/* sleep for a bit to let the command complete */
-	msleep(100);
-
-	/* write protect memory to make it safe */
-	outb(readb(&sabi->reMem), readw(&sabi->portNo));
-
-	/* see if the command actually succeeded */
-	if (readb(&iface->complete) == 0xaa && readb(&iface->retval[0]) != 0xff) {
-		/* it did! */
-		return 0;
-	}
-
-	/* Something bad happened, so report it and error out */
-	printk(KERN_WARNING "SABI command 0x%02x failed with completion flag 0x%02x and output 0x%02x\n",
-		command, readb(&iface->complete), readb(&iface->retval[0]));
-	return -EINVAL;
-}
-
 static int __init samsung_init(void)
 {
 	void __iomem *memcheck;
 	char *testStr = "SwSmi@";
 	unsigned int ifaceP;
-	int pStr,loca,te;
+	int pStr,loca;
 	struct sabi_retval sretval;
 	int retval;
 	int i;
@@ -228,45 +213,20 @@ static int __init samsung_init(void)
 	if (!dmi_check_system(samsung_dmi_table))
 		return -ENODEV;
 
-	/*
-	 * The Samsung N120, N130, and NC10 use pci device id 0x27ae, while the
-	 * NP-Q45 uses 0x2a02.  Odds are we might need to add more to the
-	 * list over time...
-	 */
-	pci_device = pci_get_device(PCI_VENDOR_ID_INTEL, 0x27ae, NULL);
-	if (!pci_device) {
-		pci_device = pci_get_device(PCI_VENDOR_ID_INTEL, 0x2a02, NULL);
-		if (!pci_device)
-			return -ENODEV;
+	f0000_segment = ioremap(0xf0000, 0xffff);
+	if (!f0000_segment) {
+		printk(KERN_ERR "Can't map the segment at 0xf0000\n");
+		return -EINVAL;
 	}
 
-	/* create a backlight device to talk to this one */
-	backlight_device = backlight_device_register("samsung",
-						     &pci_device->dev,
-						     NULL, &backlight_ops);
-	if (IS_ERR(backlight_device)) {
-		pci_dev_put(pci_device);
-		return PTR_ERR(backlight_device);
-	}
-
-	backlight_device->props.max_brightness = MAX_BRIGHT;
-	backlight_device->props.brightness = read_brightness();
-	backlight_device->props.power = FB_BLANK_UNBLANK;
-	backlight_update_status(backlight_device);
-
-//	return 0;
-
-
+	/* Try to find the signature "SwSmi@" in memory to find the header */
 	pStr = 0;
-	memcheck = ioremap(0xf0000, 0xffff);
-	unmap1 = memcheck;
+	memcheck = f0000_segment;
 	for (loca = 0; loca < 0xffff; loca++) {
 		char temp = readb(memcheck + loca);
 
-//		if (*(testStr + pStr) == *(memcheck+loca)) {
 		if (temp == testStr[pStr]) {
 			printk("%c", temp);
-
 			if (pStr == 5) {
 				printk("\n");
 				break;
@@ -278,12 +238,11 @@ static int __init samsung_init(void)
 	}
 	if (loca == 0xffff) {
 		printk(KERN_INFO "This computer does not support SABI\n");
-		sabisupport = 0;
-		goto exit;
+		goto error_no_signature;
 		}
 
-	loca += 1; /*pointing SMI port Number*/
-	sabisupport = 1;
+	/* point to the SMI port Number */
+	loca += 1;
 	sabi = (struct sabi_header __iomem *)(loca + memcheck);
 	if (!sabi) {
 		printk(KERN_ERR "Can't remap %p\n", loca + memcheck);
@@ -301,14 +260,15 @@ static int __init samsung_init(void)
 	printk(KERN_INFO " BIOS interface version = 0x%02x\n", readb(&sabi->BIOSifver));
 	printk(KERN_INFO " KBD Launcher string = 0x%02x\n", readb(&sabi->LauncherString));
 
+	/* Get a pointer to the SABI Interface */
 	ifaceP = (readw(&sabi->dataSegment) & 0x0ffff) << 4;
 	ifaceP += readw(&sabi->dataOffset) & 0x0ffff;
-	iface = (struct sabi_interface __iomem *)ioremap(ifaceP, 16);
-	if (!iface) {
+	sabi_iface = (struct sabi_interface __iomem *)ioremap(ifaceP, 16);
+	if (!sabi_iface) {
 		printk(KERN_ERR "Can't remap %x\n", ifaceP);
 		goto exit;
 	}
-	printk("SABI Interface = %p\n", iface);
+	printk("SABI Interface = %p\n", sabi_iface);
 
 	retval = sabi_get_command(SABI_GET_MODEL, &sretval);
 	if (!retval) {
@@ -352,54 +312,37 @@ static int __init samsung_init(void)
 	retval = sabi_get_command(SABI_GET_ETIQUETTE_MODE, &sretval);
 	if (!retval)
 		printk("etiquette mode = 0x%02x\n", sretval.retval[0]);
+	retval = sabi_get_command(SABI_GET_CPU_TEMP, &sretval);
+	if (!retval)
+		printk("cpu temp = 0x%02x\n", sretval.retval[0]);
 
-	/* read model number */
-	outb(readb(&sabi->enMem), readw(&sabi->portNo));
-	writew(0x5843, &iface->mainfunc);
-	writew(4, &iface->subfunc);
-	writeb(0, &iface->complete);
-	outb(readb(&sabi->ifaceFunc), readw(&sabi->portNo));
-	for(te=0;te<10000;te++)
-		;
-	/* long enough? */
-	msleep(100);
-	outb(readb(&sabi->reMem), readw(&sabi->portNo));
-	if (readb(&iface->complete) == 0xaa && readb(&iface->retval[0]) != 0xff) {
-		printk("Model %c%c%c%c\n",
-			readb(&iface->retval[0]),
-			readb(&iface->retval[1]),
-			readb(&iface->retval[2]),
-			readb(&iface->retval[3]));
-	}
+	/* create a backlight device to talk to this one */
+	backlight_device = backlight_device_register("samsung", NULL,
+						     NULL, &backlight_ops);
+	if (IS_ERR(backlight_device))
+		goto error_no_backlight;
 
-	/* read backlight value, 0-8 */
-	outb(readb(&sabi->enMem), readw(&sabi->portNo));
-	writew(0x5843, &iface->mainfunc);
-	writew(0x10, &iface->subfunc);
-	writeb(0, &iface->complete);
-	outb(readb(&sabi->ifaceFunc), readw(&sabi->portNo));
-	msleep(100);
-
-	outb(readb(&sabi->reMem), readw(&sabi->portNo));
-
-	if (readb(&iface->complete) == 0xaa && readb(&iface->retval[0]) != 0xff) {
-		printk(KERN_INFO "backlight=%d\n", readb(&iface->retval[0]));
-	}
-
-
+	backlight_device->props.max_brightness = MAX_BRIGHT;
+	backlight_device->props.brightness = read_brightness();
+	backlight_device->props.power = FB_BLANK_UNBLANK;
+	backlight_update_status(backlight_device);
 
 exit:
 	return 0;
+
+error_no_backlight:
+	iounmap(sabi_iface);
+
+error_no_signature:
+	iounmap(f0000_segment);
+	return -EINVAL;
 }
 
 static void __exit samsung_exit(void)
 {
 	backlight_device_unregister(backlight_device);
-
-	/* we are done with the PCI device, put it back */
-	pci_dev_put(pci_device);
-	iounmap(iface);
-	iounmap(unmap1);
+	iounmap(sabi_iface);
+	iounmap(f0000_segment);
 }
 
 module_init(samsung_init);
