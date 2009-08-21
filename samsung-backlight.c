@@ -184,6 +184,36 @@ static int sabi_get_command(u8 command, struct sabi_retval *sretval)
 	return -EINVAL;
 }
 
+static int sabi_set_command(u8 command, u8 data)
+{
+	/* enable memory to be able to write to it */
+	outb(readb(&sabi->enMem), readw(&sabi->portNo));
+
+	/* write out the command */
+	writew(0x5843, &iface->mainfunc);
+	writew(command, &iface->subfunc);
+	writeb(0, &iface->complete);
+	writeb(data, &iface->retval[0]);
+	outb(readb(&sabi->ifaceFunc), readw(&sabi->portNo));
+
+	/* sleep for a bit to let the command complete */
+	msleep(100);
+
+	/* write protect memory to make it safe */
+	outb(readb(&sabi->reMem), readw(&sabi->portNo));
+
+	/* see if the command actually succeeded */
+	if (readb(&iface->complete) == 0xaa && readb(&iface->retval[0]) != 0xff) {
+		/* it did! */
+		return 0;
+	}
+
+	/* Something bad happened, so report it and error out */
+	printk(KERN_WARNING "SABI command 0x%02x failed with completion flag 0x%02x and output 0x%02x\n",
+		command, readb(&iface->complete), readb(&iface->retval[0]));
+	return -EINVAL;
+}
+
 static int __init samsung_init(void)
 {
 	void __iomem *memcheck;
@@ -192,6 +222,7 @@ static int __init samsung_init(void)
 	int pStr,loca,te;
 	struct sabi_retval sretval;
 	int retval;
+	int i;
 
 
 	if (!dmi_check_system(samsung_dmi_table))
@@ -291,6 +322,24 @@ static int __init samsung_init(void)
 	retval = sabi_get_command(SABI_GET_BACKLIGHT, &sretval);
 	if (!retval)
 		printk("backlight = 0x%02x\n", sretval.retval[0]);
+	retval = sabi_set_command(SABI_GET_BACKLIGHT, 0x00);
+	retval = sabi_get_command(SABI_GET_BACKLIGHT, &sretval);
+	if (!retval)
+		printk("backlight = 0x%02x\n", sretval.retval[0]);
+	msleep(1000);
+	retval = sabi_set_command(SABI_GET_BACKLIGHT, 0x01);
+	retval = sabi_get_command(SABI_GET_BACKLIGHT, &sretval);
+	if (!retval)
+		printk("backlight = 0x%02x\n", sretval.retval[0]);
+
+	for (i = 0; i < 9; i++) {
+		sabi_set_command(SABI_SET_BRIGHTNESS, i);
+		retval = sabi_get_command(SABI_GET_BRIGHTNESS, &sretval);
+		if (!retval)
+			printk("brightness = 0x%02x\n", sretval.retval[0]);
+		msleep(1000);
+	}
+	sabi_set_command(SABI_SET_BRIGHTNESS, 8);
 
 	retval = sabi_get_command(SABI_GET_WIRELESS_BUTTON, &sretval);
 	if (!retval)
