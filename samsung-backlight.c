@@ -65,6 +65,7 @@ static struct sabi_header __iomem *sabi;
 static struct sabi_interface __iomem *sabi_iface;
 static void __iomem *f0000_segment;
 static struct backlight_device *backlight_device;
+static struct mutex sabi_mutex;
 
 static int force;
 module_param(force, bool, 0);
@@ -76,6 +77,10 @@ MODULE_PARM_DESC(debug, "Debug enabled or not");
 
 static int sabi_get_command(u8 command, struct sabi_retval *sretval)
 {
+	int retval = 0;
+
+	mutex_lock(&sabi_mutex);
+
 	/* enable memory to be able to write to it */
 	outb(readb(&sabi->enMem), readw(&sabi->portNo));
 
@@ -100,18 +105,26 @@ static int sabi_get_command(u8 command, struct sabi_retval *sretval)
 		sretval->retval[1] = readb(&sabi_iface->retval[1]);
 		sretval->retval[2] = readb(&sabi_iface->retval[2]);
 		sretval->retval[3] = readb(&sabi_iface->retval[3]);
-		return 0;
+		goto exit;
 	}
 
 	/* Something bad happened, so report it and error out */
 	printk(KERN_WARNING "SABI command 0x%02x failed with completion flag 0x%02x and output 0x%02x\n",
 		command, readb(&sabi_iface->complete),
 		readb(&sabi_iface->retval[0]));
-	return -EINVAL;
+	retval = -EINVAL;
+exit:
+	mutex_unlock(&sabi_mutex);
+	return retval;
+
 }
 
 static int sabi_set_command(u8 command, u8 data)
 {
+	int retval = 0;
+
+	mutex_lock(&sabi_mutex);
+
 	/* enable memory to be able to write to it */
 	outb(readb(&sabi->enMem), readw(&sabi->portNo));
 
@@ -132,14 +145,17 @@ static int sabi_set_command(u8 command, u8 data)
 	if (readb(&sabi_iface->complete) == 0xaa &&
 	    readb(&sabi_iface->retval[0]) != 0xff) {
 		/* it did! */
-		return 0;
+		goto exit;
 	}
 
 	/* Something bad happened, so report it and error out */
 	printk(KERN_WARNING "SABI command 0x%02x failed with completion flag 0x%02x and output 0x%02x\n",
 		command, readb(&sabi_iface->complete),
 		readb(&sabi_iface->retval[0]));
-	return -EINVAL;
+	retval = -EINVAL;
+exit:
+	mutex_unlock(&sabi_mutex);
+	return retval;
 }
 
 static u8 read_brightness(void)
@@ -216,6 +232,8 @@ static int __init samsung_init(void)
 	int pStr;
 	int loca;
 	int retval;
+
+	mutex_init(&sabi_mutex);
 
 	if (!force && !dmi_check_system(samsung_dmi_table))
 		return -ENODEV;
