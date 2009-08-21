@@ -104,24 +104,6 @@ static struct dmi_system_id __initdata samsung_dmi_table[] = {
 		},
 		.callback = dmi_check_cb,
 	},
-	{
-		.ident = "NC10",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
-			DMI_MATCH(DMI_PRODUCT_NAME, "NC10"),
-			DMI_MATCH(DMI_BOARD_NAME, "NC10"),
-		},
-		.callback = dmi_check_cb,
-	},
-	{
-		.ident = "NP-Q45",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
-			DMI_MATCH(DMI_PRODUCT_NAME, "SQ45S70S"),
-			DMI_MATCH(DMI_BOARD_NAME, "SQ45S70S"),
-		},
-		.callback = dmi_check_cb,
-	},
 	{ },
 };
 
@@ -175,5 +157,3 @@ MODULE_DESCRIPTION("Samsung Backlight driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnN120:*:rnN120:*");
 MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnN130:*:rnN130:*");
-MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnNC10:*:rnNC10:*");
-MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnSQ45S70S:*:rnSQ45S70S:*");
