@@ -20,8 +20,8 @@
 
 /*
  * We have 0 - 8 as valid brightness levels.  The specs say that level 0 should
- * be reserved by the BIOS (which really doesn't make much sense), we tell userspace
- * that the value is 0 - 7 and then just tell the hardware 1 - 8
+ * be reserved by the BIOS (which really doesn't make much sense), we tell
+ * userspace that the value is 0 - 7 and then just tell the hardware 1 - 8
  */
 
 #define MAX_BRIGHT	0x07
@@ -213,9 +213,9 @@ static int __init samsung_init(void)
 	const char *testStr = "SwSmi@";
 	void __iomem *memcheck;
 	unsigned int ifaceP;
-	int pStr,loca;
+	int pStr;
+	int loca;
 	int retval;
-
 
 	if (!force && !dmi_check_system(samsung_dmi_table))
 		return -ENODEV;
@@ -233,12 +233,9 @@ static int __init samsung_init(void)
 		char temp = readb(memcheck + loca);
 
 		if (temp == testStr[pStr]) {
-			printk("%c", temp);
-			if (pStr == 5) {
-				printk("\n");
+			if (pStr == 5)
 				break;
-			}
-			pStr += 1;
+			++pStr;
 		} else {
 			pStr = 0;
 		}
@@ -275,11 +272,11 @@ static int __init samsung_init(void)
 		printk(KERN_ERR "Can't remap %x\n", ifaceP);
 		goto exit;
 	}
-	printk("SABI Interface = %p\n", sabi_iface);
+	printk(KERN_INFO "SABI Interface = %p\n", sabi_iface);
 
 	retval = sabi_get_command(SABI_GET_MODEL, &sretval);
 	if (!retval) {
-		printk("Model Name %c%c%c%c\n",
+		printk(KERN_INFO "Model Name %c%c%c%c\n",
 			sretval.retval[0],
 			sretval.retval[1],
 			sretval.retval[2],
