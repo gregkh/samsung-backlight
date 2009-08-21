@@ -36,6 +36,35 @@
  * no power plugged in.
  */
 
+struct sabi_header {
+	u16 portNo;
+	u8 ifaceFunc;
+	u8 enMem;
+	u8 reMem;
+	u16 dataOffset;
+	u16 dataSegment;
+	u8 BIOSifver;
+	u8 LauncherString;
+} __attribute__((packed));
+
+struct sabi_interface {
+	u16 mainfunc;
+	u16 subfunc;
+	u8 complete;
+	u8 retval[20];
+} __attribute__((packed));
+
+struct sabifuncio {
+	u16 subfunc;
+	u16 len_data;
+	u8 data[20];
+} __attribute__((packed));
+
+static struct sabi_header *sabi;
+static struct sabi_interface *iface;
+static unsigned int ifaceP=0;
+static char *unmap1;
+static int sabisupport = 0;
 
 static int offset = OFFSET;
 module_param(offset, int, S_IRUGO | S_IWUSR);
@@ -109,6 +138,10 @@ static struct dmi_system_id __initdata samsung_dmi_table[] = {
 
 static int __init samsung_init(void)
 {
+	char *memcheck;
+	char *testStr = "SwSmi@";
+	int pStr,loca,te;
+
 	if (!dmi_check_system(samsung_dmi_table))
 		return -ENODEV;
 
@@ -138,7 +171,67 @@ static int __init samsung_init(void)
 	backlight_device->props.power = FB_BLANK_UNBLANK;
 	backlight_update_status(backlight_device);
 
+//	return 0;
+
+
+	pStr=0;
+	memcheck = ioremap(0xf0000, 0xffff);
+	unmap1 = memcheck;
+	for (loca=0; loca < 0xffff; loca++) {
+		if (*(testStr + pStr) == *(memcheck+loca)) {
+			printk("%c",*(memcheck+loca));
+
+			if (pStr == 5) {
+				printk("\n");
+				break;
+			}
+			pStr += 1;
+		} else {
+			pStr = 0;
+		}
+	}
+	if (loca == 0xffff){
+		printk(KERN_INFO "This computer does not support SABI\n");
+		sabisupport = 0;
+	} else {
+		loca += 1; /*pointing SMI port Number*/
+		sabisupport = 1;
+		sabi = (struct sabi_header *)(loca+memcheck);
+		ifaceP += ((sabi->dataSegment) & 0x0ffff) << 4;
+		ifaceP += (sabi->dataOffset) & 0x0ffff;
+		outb(sabi->enMem, sabi->portNo);
+		iface = (struct sabi_interface *)ioremap(ifaceP, 16);
+		printk("%x\n", (unsigned int)iface);
+		if (iface != 0) {
+			iface->mainfunc=0x5843;
+			iface->subfunc=4;
+			iface->complete=0;
+			outb(sabi->ifaceFunc, sabi->portNo);
+			for(te=0;te<10000;te++)
+				;
+		}
+		//sleep needed
+		outb(sabi->reMem, sabi->portNo);
+		if (iface !=0 && iface->complete == 0xaa && iface->retval[0] != 0xff) {
+			printk("%c%c%c%c\n",
+				(iface->retval)[0],
+				(iface->retval)[1],
+				(iface->retval)[2],
+				(iface->retval)[3]);
+			iounmap(iface);
+		}
+//		#ifdef TIKADEBUG
+		printk("This computer supports SABI==%x\n",loca+0xf0000-6);
+		printk("address segment %x,offset %x\n",sabi->dataSegment,sabi->dataOffset);
+		printk("%x,%x --> iface address\n",(unsigned int)ifaceP,(unsigned int)iface);
+		printk("%x,%x",0x01&0x02,0x01&&0x02);
+		printk("function port %x,next 3 value is %x,%x,%x\n",sabi->portNo,sabi->ifaceFunc,sabi->enMem,sabi->reMem);
+//		#endif
+	}
+
 	return 0;
+
+
 }
 
 static void __exit samsung_exit(void)
@@ -147,6 +240,8 @@ static void __exit samsung_exit(void)
 
 	/* we are done with the PCI device, put it back */
 	pci_dev_put(pci_device);
+	iounmap(iface);
+	iounmap(unmap1);
 }
 
 module_init(samsung_init);
