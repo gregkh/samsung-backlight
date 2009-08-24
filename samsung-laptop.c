@@ -17,6 +17,7 @@
 #include <linux/fb.h>
 #include <linux/dmi.h>
 #include <linux/platform_device.h>
+#include <linux/rfkill.h>
 
 /*
  * This driver is needed because a number of Samsung laptops do not hook
@@ -113,6 +114,7 @@ static void __iomem *f0000_segment;
 static struct backlight_device *backlight_device;
 static struct mutex sabi_mutex;
 static struct platform_device *sdev;
+static struct rfkill *rfk;
 
 static int force;
 module_param(force, bool, 0);
@@ -243,6 +245,25 @@ static int update_status(struct backlight_device *bd)
 static struct backlight_ops backlight_ops = {
 	.get_brightness	= get_brightness,
 	.update_status	= update_status,
+};
+
+static int rfkill_set(void *data, bool blocked)
+{
+	/* Do something with blocked...*/
+	/*
+	 * blocked == false is on
+	 * blocked == true is off
+	 */
+	if (blocked)
+		sabi_set_command(SABI_SET_WIRELESS_BUTTON, 0);
+	else
+		sabi_set_command(SABI_SET_WIRELESS_BUTTON, 1);
+
+	return 0;
+}
+
+static struct rfkill_ops rfkill_ops = {
+	.set_block = rfkill_set,
 };
 
 static int __init dmi_check_cb(const struct dmi_system_id *id)
@@ -388,8 +409,22 @@ static int __init samsung_init(void)
 	backlight_device->props.power = FB_BLANK_UNBLANK;
 	backlight_update_status(backlight_device);
 
+	rfk = rfkill_alloc("samsung-wifi", &sdev->dev, RFKILL_TYPE_WLAN,
+			   &rfkill_ops, NULL);
+	if (!rfk)
+		goto error_no_rfk;
+
+	retval = rfkill_register(rfk);
+	if (retval) {
+		rfkill_destroy(rfk);
+		goto error_no_rfk;
+	}
+
 exit:
 	return 0;
+
+error_no_rfk:
+	backlight_device_unregister(backlight_device);
 
 error_no_backlight:
 	platform_device_unregister(sdev);
@@ -405,6 +440,8 @@ error_no_signature:
 static void __exit samsung_exit(void)
 {
 	backlight_device_unregister(backlight_device);
+	rfkill_unregister(rfk);
+	rfkill_destroy(rfk);
 	iounmap(sabi_iface);
 	iounmap(f0000_segment);
 	platform_device_unregister(sdev);
