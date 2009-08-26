@@ -51,28 +51,14 @@
 #define SABI_SET_BACKLIGHT		0x2e
 
 /*
- * This is different
  * There is 3 different modes here:
  *   0 - off
  *   1 - on
  *   2 - max performance mode
  * off is "normal" mode.
- * on means that whatever the bios setting for etiquette mode, is enabled.  It
- * seems that the BIOS can set either "auto" mode, or "slow" mode.  If "slow"
- * mode is set, the fan turns off, and the cpu is throttled down to not cause
- * the fan to turn on if at all possible.
- * max performance means that the processor can be overclocked and run faster
- * then is physically possible.  Ok, maybe not physically possible, but it is
- * overclocked.  Funny that the system has a setting for this...
  */
 #define SABI_GET_ETIQUETTE_MODE		0x31
 #define SABI_SET_ETIQUETTE_MODE		0x32
-
-/*
- * I imagine that on some laptops there is a bluetooth switch, but I don't know
- * what that looks like, or where it is in the BIOS address space
- */
-
 
 #define SABI_HEADER_PORT		0x00
 #define SABI_HEADER_IFACEFUNC		0x02
@@ -80,17 +66,11 @@
 #define SABI_HEADER_RE_MEM		0x04
 #define SABI_HEADER_DATA_OFFSET		0x05
 #define SABI_HEADER_DATA_SEGMENT	0x07
-/*
- * The SABI interface that we use to write and read values from the system.
- * It is found by looking at the dataOffset and dataSegment values in the sabi
- * header structure
- */
-struct sabi_interface {
-	u16 mainfunc;
-	u16 subfunc;
-	u8 complete;
-	u8 retval[20];
-} __attribute__((packed));
+
+#define SABI_IFACE_MAIN			0x00
+#define SABI_IFACE_SUB			0x02
+#define SABI_IFACE_COMPLETE		0x04
+#define SABI_IFACE_DATA			0x05
 
 /* Structure to get data back to the calling function */
 struct sabi_retval {
@@ -98,7 +78,7 @@ struct sabi_retval {
 };
 
 static void __iomem *sabi;
-static struct sabi_interface __iomem *sabi_iface;
+static void __iomem *sabi_iface;
 static void __iomem *f0000_segment;
 static struct backlight_device *backlight_device;
 static struct mutex sabi_mutex;
@@ -123,9 +103,9 @@ static int sabi_get_command(u8 command, struct sabi_retval *sretval)
 	outb(readb(sabi + SABI_HEADER_EN_MEM), port);
 
 	/* write out the command */
-	writew(0x5843, &sabi_iface->mainfunc);
-	writew(command, &sabi_iface->subfunc);
-	writeb(0, &sabi_iface->complete);
+	writew(0x5843, sabi_iface + SABI_IFACE_MAIN);
+	writew(command, sabi_iface + SABI_IFACE_SUB);
+	writeb(0, sabi_iface + SABI_IFACE_COMPLETE);
 	outb(readb(sabi + SABI_HEADER_IFACEFUNC), port);
 
 	/* sleep for a bit to let the command complete */
@@ -135,8 +115,8 @@ static int sabi_get_command(u8 command, struct sabi_retval *sretval)
 	outb(readb(sabi + SABI_HEADER_RE_MEM), port);
 
 	/* see if the command actually succeeded */
-	if (readb(&sabi_iface->complete) == 0xaa &&
-	    readb(&sabi_iface->retval[0]) != 0xff) {
+	if (readb(sabi_iface + SABI_IFACE_COMPLETE) == 0xaa &&
+	    readb(sabi_iface + SABI_IFACE_DATA) != 0xff) {
 		/*
 		 * It did!
 		 * Save off the data into a structure so the caller use it.
@@ -144,17 +124,17 @@ static int sabi_get_command(u8 command, struct sabi_retval *sretval)
 		 * I suppose there are commands that need more, but I don't
 		 * know about them.
 		 */
-		sretval->retval[0] = readb(&sabi_iface->retval[0]);
-		sretval->retval[1] = readb(&sabi_iface->retval[1]);
-		sretval->retval[2] = readb(&sabi_iface->retval[2]);
-		sretval->retval[3] = readb(&sabi_iface->retval[3]);
+		sretval->retval[0] = readb(sabi_iface + SABI_IFACE_DATA);
+		sretval->retval[1] = readb(sabi_iface + SABI_IFACE_DATA + 1);
+		sretval->retval[2] = readb(sabi_iface + SABI_IFACE_DATA + 2);
+		sretval->retval[3] = readb(sabi_iface + SABI_IFACE_DATA + 3);
 		goto exit;
 	}
 
 	/* Something bad happened, so report it and error out */
 	printk(KERN_WARNING "SABI command 0x%02x failed with completion flag 0x%02x and output 0x%02x\n",
-		command, readb(&sabi_iface->complete),
-		readb(&sabi_iface->retval[0]));
+		command, readb(sabi_iface + SABI_IFACE_COMPLETE),
+		readb(sabi_iface + SABI_IFACE_DATA));
 	retval = -EINVAL;
 exit:
 	mutex_unlock(&sabi_mutex);
@@ -173,10 +153,10 @@ static int sabi_set_command(u8 command, u8 data)
 	outb(readb(sabi + SABI_HEADER_EN_MEM), port);
 
 	/* write out the command */
-	writew(0x5843, &sabi_iface->mainfunc);
-	writew(command, &sabi_iface->subfunc);
-	writeb(0, &sabi_iface->complete);
-	writeb(data, &sabi_iface->retval[0]);
+	writew(0x5843, sabi_iface + SABI_IFACE_MAIN);
+	writew(command, sabi_iface + SABI_IFACE_SUB);
+	writeb(0, sabi_iface + SABI_IFACE_COMPLETE);
+	writeb(data, sabi_iface + SABI_IFACE_DATA);
 	outb(readb(sabi + SABI_HEADER_IFACEFUNC), port);
 
 	/* sleep for a bit to let the command complete */
@@ -186,16 +166,16 @@ static int sabi_set_command(u8 command, u8 data)
 	outb(readb(sabi + SABI_HEADER_RE_MEM), port);
 
 	/* see if the command actually succeeded */
-	if (readb(&sabi_iface->complete) == 0xaa &&
-	    readb(&sabi_iface->retval[0]) != 0xff) {
+	if (readb(sabi_iface + SABI_IFACE_COMPLETE) == 0xaa &&
+	    readb(sabi_iface + SABI_IFACE_DATA) != 0xff) {
 		/* it did! */
 		goto exit;
 	}
 
 	/* Something bad happened, so report it and error out */
 	printk(KERN_WARNING "SABI command 0x%02x failed with completion flag 0x%02x and output 0x%02x\n",
-		command, readb(&sabi_iface->complete),
-		readb(&sabi_iface->retval[0]));
+		command, readb(sabi_iface + SABI_IFACE_COMPLETE),
+		readb(sabi_iface + SABI_IFACE_DATA));
 	retval = -EINVAL;
 exit:
 	mutex_unlock(&sabi_mutex);
@@ -318,12 +298,11 @@ static int __init samsung_init(void)
 	/* Get a pointer to the SABI Interface */
 	ifaceP = (readw(sabi + SABI_HEADER_DATA_SEGMENT) & 0x0ffff) << 4;
 	ifaceP += readw(sabi + SABI_HEADER_DATA_OFFSET) & 0x0ffff;
-	sabi_iface = (struct sabi_interface __iomem *)ioremap(ifaceP, 16);
+	sabi_iface = ioremap(ifaceP, 16);
 	if (!sabi_iface) {
 		printk(KERN_ERR "Can't remap %x\n", ifaceP);
 		goto exit;
 	}
-	printk(KERN_INFO "SABI Interface = %p\n", sabi_iface);
 
 	retval = sabi_get_command(SABI_GET_MODEL, &sretval);
 	if (!retval) {
