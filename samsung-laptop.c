@@ -74,22 +74,12 @@
  */
 
 
-/*
- * SABI HEADER in low memory (f0000)
- * We need to poke through memory to find a signature in order to find the
- * exact location of this structure.
- */
-struct sabi_header {
-	u16 portNo;
-	u8 ifaceFunc;
-	u8 enMem;
-	u8 reMem;
-	u16 dataOffset;
-	u16 dataSegment;
-	u8 BIOSifver;
-	u8 LauncherString;
-} __attribute__((packed));
-
+#define SABI_HEADER_PORT		0x00
+#define SABI_HEADER_IFACEFUNC		0x02
+#define SABI_HEADER_EN_MEM		0x03
+#define SABI_HEADER_RE_MEM		0x04
+#define SABI_HEADER_DATA_OFFSET		0x05
+#define SABI_HEADER_DATA_SEGMENT	0x07
 /*
  * The SABI interface that we use to write and read values from the system.
  * It is found by looking at the dataOffset and dataSegment values in the sabi
@@ -107,7 +97,7 @@ struct sabi_retval {
 	u8 retval[20];
 };
 
-static struct sabi_header __iomem *sabi;
+static void __iomem *sabi;
 static struct sabi_interface __iomem *sabi_iface;
 static void __iomem *f0000_segment;
 static struct backlight_device *backlight_device;
@@ -125,23 +115,24 @@ MODULE_PARM_DESC(debug, "Debug enabled or not");
 static int sabi_get_command(u8 command, struct sabi_retval *sretval)
 {
 	int retval = 0;
+	u16 port = readw(sabi + SABI_HEADER_PORT);
 
 	mutex_lock(&sabi_mutex);
 
 	/* enable memory to be able to write to it */
-	outb(readb(&sabi->enMem), readw(&sabi->portNo));
+	outb(readb(sabi + SABI_HEADER_EN_MEM), port);
 
 	/* write out the command */
 	writew(0x5843, &sabi_iface->mainfunc);
 	writew(command, &sabi_iface->subfunc);
 	writeb(0, &sabi_iface->complete);
-	outb(readb(&sabi->ifaceFunc), readw(&sabi->portNo));
+	outb(readb(sabi + SABI_HEADER_IFACEFUNC), port);
 
 	/* sleep for a bit to let the command complete */
 	msleep(100);
 
 	/* write protect memory to make it safe */
-	outb(readb(&sabi->reMem), readw(&sabi->portNo));
+	outb(readb(sabi + SABI_HEADER_RE_MEM), port);
 
 	/* see if the command actually succeeded */
 	if (readb(&sabi_iface->complete) == 0xaa &&
@@ -174,24 +165,25 @@ exit:
 static int sabi_set_command(u8 command, u8 data)
 {
 	int retval = 0;
+	u16 port = readw(sabi + SABI_HEADER_PORT);
 
 	mutex_lock(&sabi_mutex);
 
 	/* enable memory to be able to write to it */
-	outb(readb(&sabi->enMem), readw(&sabi->portNo));
+	outb(readb(sabi + SABI_HEADER_EN_MEM), port);
 
 	/* write out the command */
 	writew(0x5843, &sabi_iface->mainfunc);
 	writew(command, &sabi_iface->subfunc);
 	writeb(0, &sabi_iface->complete);
 	writeb(data, &sabi_iface->retval[0]);
-	outb(readb(&sabi->ifaceFunc), readw(&sabi->portNo));
+	outb(readb(sabi + SABI_HEADER_IFACEFUNC), port);
 
 	/* sleep for a bit to let the command complete */
 	msleep(100);
 
 	/* write protect memory to make it safe */
-	outb(readb(&sabi->reMem), readw(&sabi->portNo));
+	outb(readb(sabi + SABI_HEADER_RE_MEM), port);
 
 	/* see if the command actually succeeded */
 	if (readb(&sabi_iface->complete) == 0xaa &&
@@ -317,7 +309,7 @@ static int __init samsung_init(void)
 
 	/* point to the SMI port Number */
 	loca += 1;
-	sabi = (struct sabi_header __iomem *)(loca + memcheck);
+	sabi = (memcheck + loca);
 	if (!sabi) {
 		printk(KERN_ERR "Can't remap %p\n", loca + memcheck);
 		goto exit;
@@ -325,18 +317,16 @@ static int __init samsung_init(void)
 
 	printk(KERN_INFO "This computer supports SABI==%x\n", loca + 0xf0000 - 6);
 	printk(KERN_INFO "SABI header:\n");
-	printk(KERN_INFO " SMI Port Number = 0x%04x\n", readw(&sabi->portNo));
-	printk(KERN_INFO " SMI Interface Function = 0x%02x\n", readb(&sabi->ifaceFunc));
-	printk(KERN_INFO " SMI enable memory buffer = 0x%02x\n", readb(&sabi->enMem));
-	printk(KERN_INFO " SMI restore memory buffer = 0x%02x\n", readb(&sabi->reMem));
-	printk(KERN_INFO " SABI data offset = 0x%04x\n", readw(&sabi->dataOffset));
-	printk(KERN_INFO " SABI data segment = 0x%04x\n", readw(&sabi->dataSegment));
-	printk(KERN_INFO " BIOS interface version = 0x%02x\n", readb(&sabi->BIOSifver));
-	printk(KERN_INFO " KBD Launcher string = 0x%02x\n", readb(&sabi->LauncherString));
+	printk(KERN_INFO " SMI Port Number = 0x%04x\n", readw(sabi + SABI_HEADER_PORT));
+	printk(KERN_INFO " SMI Interface Function = 0x%02x\n", readb(sabi + SABI_HEADER_IFACEFUNC));
+	printk(KERN_INFO " SMI enable memory buffer = 0x%02x\n", readb(sabi + SABI_HEADER_EN_MEM));
+	printk(KERN_INFO " SMI restore memory buffer = 0x%02x\n", readb(sabi + SABI_HEADER_RE_MEM));
+	printk(KERN_INFO " SABI data offset = 0x%04x\n", readw(sabi + SABI_HEADER_DATA_OFFSET));
+	printk(KERN_INFO " SABI data segment = 0x%04x\n", readw(sabi + SABI_HEADER_DATA_SEGMENT));
 
 	/* Get a pointer to the SABI Interface */
-	ifaceP = (readw(&sabi->dataSegment) & 0x0ffff) << 4;
-	ifaceP += readw(&sabi->dataOffset) & 0x0ffff;
+	ifaceP = (readw(sabi + SABI_HEADER_DATA_SEGMENT) & 0x0ffff) << 4;
+	ifaceP += readw(sabi + SABI_HEADER_DATA_OFFSET) & 0x0ffff;
 	sabi_iface = (struct sabi_interface __iomem *)ioremap(ifaceP, 16);
 	if (!sabi_iface) {
 		printk(KERN_ERR "Can't remap %x\n", ifaceP);
