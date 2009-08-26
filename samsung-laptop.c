@@ -246,7 +246,7 @@ static struct dmi_system_id __initdata samsung_dmi_table[] = {
 	},
 	{ },
 };
-
+MODULE_DEVICE_TABLE(dmi, samsung_dmi_table);
 
 static int __init samsung_init(void)
 {
@@ -375,5 +375,3 @@ module_exit(samsung_exit);
 MODULE_AUTHOR("Greg Kroah-Hartman <gregkh@suse.de>");
 MODULE_DESCRIPTION("Samsung Backlight driver");
 MODULE_LICENSE("GPL");
-MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnN120:*:rnN120:*");
-MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnN130:*:rnN130:*");
