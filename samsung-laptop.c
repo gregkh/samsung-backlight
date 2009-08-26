@@ -304,33 +304,31 @@ static int __init samsung_init(void)
 		goto exit;
 	}
 
-	retval = sabi_get_command(SABI_GET_MODEL, &sretval);
-	if (!retval) {
+	if (debug) {
+		retval = sabi_get_command(SABI_GET_MODEL, &sretval);
 		printk(KERN_INFO "Model Name %c%c%c%c\n",
 			sretval.retval[0],
 			sretval.retval[1],
 			sretval.retval[2],
 			sretval.retval[3]);
+
+		retval = sabi_get_command(SABI_GET_BACKLIGHT, &sretval);
+		printk(KERN_INFO "backlight = 0x%02x\n", sretval.retval[0]);
+
+		retval = sabi_get_command(SABI_GET_WIRELESS_BUTTON, &sretval);
+		printk(KERN_INFO "wireless button = 0x%02x\n",
+			sretval.retval[0]);
+
+		retval = sabi_get_command(SABI_GET_BRIGHTNESS, &sretval);
+		printk(KERN_INFO "brightness = 0x%02x\n", sretval.retval[0]);
+
+		retval = sabi_get_command(SABI_GET_ETIQUETTE_MODE, &sretval);
+		printk(KERN_INFO "etiquette mode = 0x%02x\n",
+			sretval.retval[0]);
+
+		retval = sabi_get_command(SABI_GET_CPU_TEMP, &sretval);
+		printk(KERN_INFO "cpu temp = 0x%02x\n", sretval.retval[0]);
 	}
-
-	retval = sabi_get_command(SABI_GET_BACKLIGHT, &sretval);
-	if (!retval)
-		printk("backlight = 0x%02x\n", sretval.retval[0]);
-
-	retval = sabi_get_command(SABI_GET_WIRELESS_BUTTON, &sretval);
-	if (!retval)
-		printk("wireless button = 0x%02x\n", sretval.retval[0]);
-
-	retval = sabi_get_command(SABI_GET_BRIGHTNESS, &sretval);
-	if (!retval)
-		printk("brightness = 0x%02x\n", sretval.retval[0]);
-
-	retval = sabi_get_command(SABI_GET_ETIQUETTE_MODE, &sretval);
-	if (!retval)
-		printk("etiquette mode = 0x%02x\n", sretval.retval[0]);
-	retval = sabi_get_command(SABI_GET_CPU_TEMP, &sretval);
-	if (!retval)
-		printk("cpu temp = 0x%02x\n", sretval.retval[0]);
 
 	/* knock up a platform device to hang stuff off of */
 	sdev = platform_device_register_simple("samsung", -1, NULL, 0);
