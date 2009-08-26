@@ -315,15 +315,6 @@ static int __init samsung_init(void)
 		goto exit;
 	}
 
-	printk(KERN_INFO "This computer supports SABI==%x\n", loca + 0xf0000 - 6);
-	printk(KERN_INFO "SABI header:\n");
-	printk(KERN_INFO " SMI Port Number = 0x%04x\n", readw(sabi + SABI_HEADER_PORT));
-	printk(KERN_INFO " SMI Interface Function = 0x%02x\n", readb(sabi + SABI_HEADER_IFACEFUNC));
-	printk(KERN_INFO " SMI enable memory buffer = 0x%02x\n", readb(sabi + SABI_HEADER_EN_MEM));
-	printk(KERN_INFO " SMI restore memory buffer = 0x%02x\n", readb(sabi + SABI_HEADER_RE_MEM));
-	printk(KERN_INFO " SABI data offset = 0x%04x\n", readw(sabi + SABI_HEADER_DATA_OFFSET));
-	printk(KERN_INFO " SABI data segment = 0x%04x\n", readw(sabi + SABI_HEADER_DATA_SEGMENT));
-
 	/* Get a pointer to the SABI Interface */
 	ifaceP = (readw(sabi + SABI_HEADER_DATA_SEGMENT) & 0x0ffff) << 4;
 	ifaceP += readw(sabi + SABI_HEADER_DATA_OFFSET) & 0x0ffff;
