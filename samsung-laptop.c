@@ -309,10 +309,6 @@ static int __init samsung_init(void)
 	/* point to the SMI port Number */
 	loca += 1;
 	sabi = (memcheck + loca);
-	if (!sabi) {
-		printk(KERN_ERR "Can't remap %p\n", loca + memcheck);
-		goto exit;
-	}
 
 	/* Get a pointer to the SABI Interface */
 	ifaceP = (readw(sabi + SABI_HEADER_DATA_SEGMENT) & 0x0ffff) << 4;
