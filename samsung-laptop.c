@@ -257,7 +257,7 @@ static int __init samsung_init(void)
 		char temp = readb(memcheck + loca);
 
 		if (temp == testStr[pStr]) {
-			if (pStr == 5)
+			if (pStr == strlen(testStr)-1)
 				break;
 			++pStr;
 		} else {
@@ -265,7 +265,7 @@ static int __init samsung_init(void)
 		}
 	}
 	if (loca == 0xffff) {
-		printk(KERN_INFO "This computer does not support SABI\n");
+		printk(KERN_ERR "This computer does not support SABI\n");
 		goto error_no_signature;
 		}
 
@@ -273,27 +273,45 @@ static int __init samsung_init(void)
 	loca += 1;
 	sabi = (memcheck + loca);
 
+	if (debug) {
+		printk(KERN_DEBUG "This computer supports SABI==%x\n",
+			loca + 0xf0000 - 6);
+		printk(KERN_DEBUG "SABI header:\n");
+		printk(KERN_DEBUG " SMI Port Number = 0x%04x\n",
+			readw(sabi + SABI_HEADER_PORT));
+		printk(KERN_DEBUG " SMI Interface Function = 0x%02x\n",
+			readb(sabi + SABI_HEADER_IFACEFUNC));
+		printk(KERN_DEBUG " SMI enable memory buffer = 0x%02x\n",
+			readb(sabi + SABI_HEADER_EN_MEM));
+		printk(KERN_DEBUG " SMI restore memory buffer = 0x%02x\n",
+			readb(sabi + SABI_HEADER_RE_MEM));
+		printk(KERN_DEBUG " SABI data offset = 0x%04x\n",
+			readw(sabi + SABI_HEADER_DATA_OFFSET));
+		printk(KERN_DEBUG " SABI data segment = 0x%04x\n",
+			readw(sabi + SABI_HEADER_DATA_SEGMENT));
+	}
+
 	/* Get a pointer to the SABI Interface */
 	ifaceP = (readw(sabi + SABI_HEADER_DATA_SEGMENT) & 0x0ffff) << 4;
 	ifaceP += readw(sabi + SABI_HEADER_DATA_OFFSET) & 0x0ffff;
-	printk("ifaceP = 0x%08x\n", ifaceP);
 	sabi_iface = ioremap(ifaceP, 16);
 	if (!sabi_iface) {
 		printk(KERN_ERR "Can't remap %x\n", ifaceP);
 		goto exit;
 	}
-	printk("sabi_iface = %p\n", sabi_iface);
-
 	if (debug) {
+		printk(KERN_DEBUG "ifaceP = 0x%08x\n", ifaceP);
+		printk(KERN_DEBUG "sabi_iface = %p\n", sabi_iface);
+
 		retval = sabi_get_command(GET_BACKLIGHT, &sretval);
-		printk(KERN_INFO "backlight = 0x%02x\n", sretval.retval[0]);
+		printk(KERN_DEBUG "backlight = 0x%02x\n", sretval.retval[0]);
 
 		retval = sabi_get_command(GET_WIRELESS_BUTTON, &sretval);
-		printk(KERN_INFO "wireless button = 0x%02x\n",
+		printk(KERN_DEBUG "wireless button = 0x%02x\n",
 			sretval.retval[0]);
 
 		retval = sabi_get_command(GET_BRIGHTNESS, &sretval);
-		printk(KERN_INFO "brightness = 0x%02x\n", sretval.retval[0]);
+		printk(KERN_DEBUG "brightness = 0x%02x\n", sretval.retval[0]);
 	}
 
 	/* knock up a platform device to hang stuff off of */
