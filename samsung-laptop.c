@@ -33,33 +33,23 @@
  */
 #define MAX_BRIGHT	0x07
 
-/* get model returns 4 characters that describe the model of the laptop */
-#define SABI_GET_MODEL			0x04
-
 /* Brightness is 0 - 8, as described above.  Value 0 is for the BIOS to use */
-#define SABI_GET_BRIGHTNESS		0x10
-#define SABI_SET_BRIGHTNESS		0x11
+#define GET_BRIGHTNESS			0x00
+#define SET_BRIGHTNESS			0x01
 
 /* 0 is off, 1 is on, and 2 is a second user-defined key? */
-#define SABI_GET_WIRELESS_BUTTON	0x12
-#define SABI_SET_WIRELESS_BUTTON	0x13
-
-/* Temperature is returned in degress Celsius from what I can guess. */
-#define SABI_GET_CPU_TEMP		0x29
+#define GET_WIRELESS_BUTTON		0x02
+#define SET_WIRELESS_BUTTON		0x03
 
 /* 0 is off, 1 is on.  Doesn't seem to work on a N130 for some reason */
-#define SABI_GET_BACKLIGHT		0x2d
-#define SABI_SET_BACKLIGHT		0x2e
+#define GET_BACKLIGHT			0x04
+#define SET_BACKLIGHT			0x05
 
-/*
- * There is 3 different modes here:
- *   0 - off
- *   1 - on
- *   2 - max performance mode
- * off is "normal" mode.
- */
-#define SABI_GET_ETIQUETTE_MODE		0x31
-#define SABI_SET_ETIQUETTE_MODE		0x32
+/* 0 is off 1 is on */
+#define GET_TOUCH_PAD_STATUS		0x06
+#define SET_TOUCH_PAD_STATUS		0x07
+
+#define MAIN_FUNCTION			0x4c49
 
 #define SABI_HEADER_PORT		0x00
 #define SABI_HEADER_IFACEFUNC		0x02
@@ -104,7 +94,7 @@ static int sabi_get_command(u8 command, struct sabi_retval *sretval)
 	outb(readb(sabi + SABI_HEADER_EN_MEM), port);
 
 	/* write out the command */
-	writew(0x5843, sabi_iface + SABI_IFACE_MAIN);
+	writew(MAIN_FUNCTION, sabi_iface + SABI_IFACE_MAIN);
 	writew(command, sabi_iface + SABI_IFACE_SUB);
 	writeb(0, sabi_iface + SABI_IFACE_COMPLETE);
 	outb(readb(sabi + SABI_HEADER_IFACEFUNC), port);
@@ -154,7 +144,7 @@ static int sabi_set_command(u8 command, u8 data)
 	outb(readb(sabi + SABI_HEADER_EN_MEM), port);
 
 	/* write out the command */
-	writew(0x5843, sabi_iface + SABI_IFACE_MAIN);
+	writew(MAIN_FUNCTION, sabi_iface + SABI_IFACE_MAIN);
 	writew(command, sabi_iface + SABI_IFACE_SUB);
 	writeb(0, sabi_iface + SABI_IFACE_COMPLETE);
 	writeb(data, sabi_iface + SABI_IFACE_DATA);
@@ -189,7 +179,7 @@ static u8 read_brightness(void)
 	int user_brightness = 0;
 	int retval;
 
-	retval = sabi_get_command(SABI_GET_BACKLIGHT, &sretval);
+	retval = sabi_get_command(GET_BACKLIGHT, &sretval);
 	if (!retval)
 		user_brightness = sretval.retval[0];
 		if (user_brightness != 0)
@@ -199,7 +189,7 @@ static u8 read_brightness(void)
 
 static void set_brightness(u8 user_brightness)
 {
-	sabi_set_command(SABI_SET_BRIGHTNESS, user_brightness + 1);
+	sabi_set_command(SET_BRIGHTNESS, user_brightness + 1);
 }
 
 static int get_brightness(struct backlight_device *bd)
@@ -227,38 +217,11 @@ static int __init dmi_check_cb(const struct dmi_system_id *id)
 
 static struct dmi_system_id __initdata samsung_dmi_table[] = {
 	{
-		.ident = "N120",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
-			DMI_MATCH(DMI_PRODUCT_NAME, "N120"),
-			DMI_MATCH(DMI_BOARD_NAME, "N120"),
-		},
-		.callback = dmi_check_cb,
-	},
-	{
 		.ident = "N130",
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
 			DMI_MATCH(DMI_PRODUCT_NAME, "N130"),
 			DMI_MATCH(DMI_BOARD_NAME, "N130"),
-		},
-		.callback = dmi_check_cb,
-	},
-	{
-		.ident = "NP-Q45",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
-			DMI_MATCH(DMI_PRODUCT_NAME, "SQ45S70S"),
-			DMI_MATCH(DMI_BOARD_NAME, "SQ45S70S"),
-		},
-		.callback = dmi_check_cb,
-	},
-	{
-		.ident = "R510/P510",
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
-			DMI_MATCH(DMI_PRODUCT_NAME, "R510/P510"),
-			DMI_MATCH(DMI_BOARD_NAME, "R510/P510"),
 		},
 		.callback = dmi_check_cb,
 	},
@@ -269,7 +232,7 @@ MODULE_DEVICE_TABLE(dmi, samsung_dmi_table);
 static int __init samsung_init(void)
 {
 	struct sabi_retval sretval;
-	const char *testStr = "SwSmi@";
+	const char *testStr = "SECLINUX";
 	void __iomem *memcheck;
 	unsigned int ifaceP;
 	int pStr;
@@ -287,7 +250,7 @@ static int __init samsung_init(void)
 		return -EINVAL;
 	}
 
-	/* Try to find the signature "SwSmi@" in memory to find the header */
+	/* Try to find the signature "SECLINUX" in memory to find the header */
 	pStr = 0;
 	memcheck = f0000_segment;
 	for (loca = 0; loca < 0xffff; loca++) {
@@ -313,36 +276,24 @@ static int __init samsung_init(void)
 	/* Get a pointer to the SABI Interface */
 	ifaceP = (readw(sabi + SABI_HEADER_DATA_SEGMENT) & 0x0ffff) << 4;
 	ifaceP += readw(sabi + SABI_HEADER_DATA_OFFSET) & 0x0ffff;
+	printk("ifaceP = 0x%08x\n", ifaceP);
 	sabi_iface = ioremap(ifaceP, 16);
 	if (!sabi_iface) {
 		printk(KERN_ERR "Can't remap %x\n", ifaceP);
 		goto exit;
 	}
+	printk("sabi_iface = %p\n", sabi_iface);
 
 	if (debug) {
-		retval = sabi_get_command(SABI_GET_MODEL, &sretval);
-		printk(KERN_INFO "Model Name %c%c%c%c\n",
-			sretval.retval[0],
-			sretval.retval[1],
-			sretval.retval[2],
-			sretval.retval[3]);
-
-		retval = sabi_get_command(SABI_GET_BACKLIGHT, &sretval);
+		retval = sabi_get_command(GET_BACKLIGHT, &sretval);
 		printk(KERN_INFO "backlight = 0x%02x\n", sretval.retval[0]);
 
-		retval = sabi_get_command(SABI_GET_WIRELESS_BUTTON, &sretval);
+		retval = sabi_get_command(GET_WIRELESS_BUTTON, &sretval);
 		printk(KERN_INFO "wireless button = 0x%02x\n",
 			sretval.retval[0]);
 
-		retval = sabi_get_command(SABI_GET_BRIGHTNESS, &sretval);
+		retval = sabi_get_command(GET_BRIGHTNESS, &sretval);
 		printk(KERN_INFO "brightness = 0x%02x\n", sretval.retval[0]);
-
-		retval = sabi_get_command(SABI_GET_ETIQUETTE_MODE, &sretval);
-		printk(KERN_INFO "etiquette mode = 0x%02x\n",
-			sretval.retval[0]);
-
-		retval = sabi_get_command(SABI_GET_CPU_TEMP, &sretval);
-		printk(KERN_INFO "cpu temp = 0x%02x\n", sretval.retval[0]);
 	}
 
 	/* knock up a platform device to hang stuff off of */
