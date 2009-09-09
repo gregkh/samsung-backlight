@@ -173,6 +173,50 @@ exit:
 	return retval;
 }
 
+static void test_backlight(void)
+{
+	struct sabi_retval sretval;
+
+	sabi_get_command(GET_BACKLIGHT, &sretval);
+	printk(KERN_DEBUG "backlight = 0x%02x\n", sretval.retval[0]);
+
+	sabi_set_command(SET_BACKLIGHT, 0);
+	printk(KERN_DEBUG "backlight should be off\n");
+
+	sabi_get_command(GET_BACKLIGHT, &sretval);
+	printk(KERN_DEBUG "backlight = 0x%02x\n", sretval.retval[0]);
+
+	msleep(1000);
+
+	sabi_set_command(SET_BACKLIGHT, 1);
+	printk(KERN_DEBUG "backlight should be on\n");
+
+	sabi_get_command(GET_BACKLIGHT, &sretval);
+	printk(KERN_DEBUG "backlight = 0x%02x\n", sretval.retval[0]);
+}
+
+static void test_wireless(void)
+{
+	struct sabi_retval sretval;
+
+	sabi_get_command(GET_WIRELESS_BUTTON, &sretval);
+	printk(KERN_DEBUG "wireless led = 0x%02x\n", sretval.retval[0]);
+
+	sabi_set_command(SET_WIRELESS_BUTTON, 0);
+	printk(KERN_DEBUG "wireless led should be off\n");
+
+	sabi_get_command(GET_WIRELESS_BUTTON, &sretval);
+	printk(KERN_DEBUG "wireless led = 0x%02x\n", sretval.retval[0]);
+
+	msleep(1000);
+
+	sabi_set_command(SET_WIRELESS_BUTTON, 1);
+	printk(KERN_DEBUG "wireless led should be on\n");
+
+	sabi_get_command(GET_WIRELESS_BUTTON, &sretval);
+	printk(KERN_DEBUG "wireless led = 0x%02x\n", sretval.retval[0]);
+}
+
 static u8 read_brightness(void)
 {
 	struct sabi_retval sretval;
@@ -200,6 +244,11 @@ static int get_brightness(struct backlight_device *bd)
 static int update_status(struct backlight_device *bd)
 {
 	set_brightness(bd->props.brightness);
+
+	if (bd->props.power == FB_BLANK_UNBLANK)
+		sabi_set_command(SET_BACKLIGHT, 1);
+	else
+		sabi_set_command(SET_BACKLIGHT, 0);
 	return 0;
 }
 
@@ -303,12 +352,8 @@ static int __init samsung_init(void)
 		printk(KERN_DEBUG "ifaceP = 0x%08x\n", ifaceP);
 		printk(KERN_DEBUG "sabi_iface = %p\n", sabi_iface);
 
-		retval = sabi_get_command(GET_BACKLIGHT, &sretval);
-		printk(KERN_DEBUG "backlight = 0x%02x\n", sretval.retval[0]);
-
-		retval = sabi_get_command(GET_WIRELESS_BUTTON, &sretval);
-		printk(KERN_DEBUG "wireless button = 0x%02x\n",
-			sretval.retval[0]);
+		test_backlight();
+		test_wireless();
 
 		retval = sabi_get_command(GET_BRIGHTNESS, &sretval);
 		printk(KERN_DEBUG "brightness = 0x%02x\n", sretval.retval[0]);
