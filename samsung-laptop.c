@@ -49,6 +49,17 @@
 #define GET_TOUCH_PAD_STATUS		0x06
 #define SET_TOUCH_PAD_STATUS		0x07
 
+/* 0 is low, 1 is high */
+#define GET_PERFORMANCE_LEVEL		0x08
+#define SET_PERFORMANCE_LEVEL		0x09
+
+/*
+ * Tell the BIOS that Linux is running on this machine.
+ * 81 is on, 80 is off
+ */
+#define SET_LINUX			0x0a
+
+
 #define MAIN_FUNCTION			0x4c49
 
 #define SABI_HEADER_PORT		0x00
@@ -359,6 +370,13 @@ static int __init samsung_init(void)
 		printk(KERN_DEBUG "brightness = 0x%02x\n", sretval.retval[0]);
 	}
 
+	/* Turn on "Linux" mode in the BIOS */
+	retval = sabi_set_command(SET_LINUX, 0x81);
+	if (retval) {
+		printk(KERN_ERR KBUILD_MODNAME ": Linux mode was not set!\n");
+		goto error_no_platform;
+	}
+
 	/* knock up a platform device to hang stuff off of */
 	sdev = platform_device_register_simple("samsung", -1, NULL, 0);
 	if (IS_ERR(sdev))
@@ -391,6 +409,9 @@ error_no_signature:
 
 static void __exit samsung_exit(void)
 {
+	/* Turn off "Linux" mode in the BIOS */
+	sabi_set_command(SET_LINUX, 0x80);
+
 	backlight_device_unregister(backlight_device);
 	iounmap(sabi_iface);
 	iounmap(f0000_segment);
