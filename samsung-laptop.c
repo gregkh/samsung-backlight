@@ -9,6 +9,7 @@
  * the Free Software Foundation.
  *
  */
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/module.h>
@@ -37,17 +38,27 @@
 #define GET_BRIGHTNESS			0x00
 #define SET_BRIGHTNESS			0x01
 
-/* 0 is off, 1 is on, and 2 is a second user-defined key? */
+/* first byte:
+ * 0x00 - wireless is off
+ * 0x01 - wireless is on
+ * second byte:
+ * 0x02 - 3G is off
+ * 0x03 - 3G is on
+ * TODO, verify 3G is correct, that doesn't seem right...
+ */
 #define GET_WIRELESS_BUTTON		0x02
 #define SET_WIRELESS_BUTTON		0x03
 
-/* 0 is off, 1 is on.  Doesn't seem to work on a N130 for some reason */
+/* 0 is off, 1 is on */
 #define GET_BACKLIGHT			0x04
 #define SET_BACKLIGHT			0x05
 
-/* 0 is off 1 is on */
-#define GET_TOUCH_PAD_STATUS		0x06
-#define SET_TOUCH_PAD_STATUS		0x07
+/*
+ * 0x80 or 0x00 - no action
+ * 0x81 - recovery key pressed
+ */
+#define GET_RECOVERY_METHOD		0x06
+#define SET_RECOVERY_METHOD		0x07
 
 /* 0 is low, 1 is high */
 #define GET_PERFORMANCE_LEVEL		0x08
@@ -269,6 +280,7 @@ static struct backlight_ops backlight_ops = {
 	.update_status	= update_status,
 };
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,31)
 static int rfkill_set(void *data, bool blocked)
 {
 	/* Do something with blocked...*/
@@ -287,6 +299,67 @@ static int rfkill_set(void *data, bool blocked)
 static struct rfkill_ops rfkill_ops = {
 	.set_block = rfkill_set,
 };
+
+static int init_wireless(struct platform_device *sdev)
+{
+	int retval;
+
+	rfk = rfkill_alloc("samsung-wifi", &sdev->dev, RFKILL_TYPE_WLAN,
+			   &rfkill_ops, NULL);
+	if (!rfk)
+		return -ENOMEM;
+
+	retval = rfkill_register(rfk);
+	if (retval) {
+		rfkill_destroy(rfk);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static void destroy_wireless(void)
+{
+	rfkill_unregister(rfk);
+	rfkill_destroy(rfk);
+}
+
+#else
+
+static int rfkill_set(void *data, enum rfkill_state state)
+{
+	if (state ==  RFKILL_STATE_UNBLOCKED)
+		sabi_set_command(SET_WIRELESS_BUTTON, 1);
+	else
+		sabi_set_command(SET_WIRELESS_BUTTON, 0);
+
+	return 0;
+}
+
+static int init_wireless(struct platform_device *sdev)
+{
+	int retval;
+
+	rfk = rfkill_allocate(&sdev->dev, RFKILL_TYPE_WLAN);
+	if (!rfk)
+		return -ENOMEM;
+	rfk->toggle_radio = rfkill_set;
+
+	retval = rfkill_register(rfk);
+	if (retval) {
+		rfkill_free(rfk);
+		return -ENODEV;
+	}
+
+	return 0;
+}
+
+static void destroy_wireless(void)
+{
+	rfkill_unregister(rfk);
+}
+
+#endif
 
 static int __init dmi_check_cb(const struct dmi_system_id *id)
 {
@@ -413,16 +486,9 @@ static int __init samsung_init(void)
 	backlight_device->props.power = FB_BLANK_UNBLANK;
 	backlight_update_status(backlight_device);
 
-	rfk = rfkill_alloc("samsung-wifi", &sdev->dev, RFKILL_TYPE_WLAN,
-			   &rfkill_ops, NULL);
-	if (!rfk)
+	retval = init_wireless(sdev);
+	if (retval)
 		goto error_no_rfk;
-
-	retval = rfkill_register(rfk);
-	if (retval) {
-		rfkill_destroy(rfk);
-		goto error_no_rfk;
-	}
 
 exit:
 	return 0;
@@ -447,8 +513,7 @@ static void __exit samsung_exit(void)
 	sabi_set_command(SET_LINUX, 0x80);
 
 	backlight_device_unregister(backlight_device);
-	rfkill_unregister(rfk);
-	rfkill_destroy(rfk);
+	destroy_wireless();
 	iounmap(sabi_iface);
 	iounmap(f0000_segment);
 	platform_device_unregister(sdev);
