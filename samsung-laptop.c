@@ -362,6 +362,43 @@ static void destroy_wireless(void)
 
 #endif
 
+static ssize_t get_silent_state(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct sabi_retval sretval;
+	int retval;
+
+	/* Read the state */
+	retval = sabi_get_command(GET_PERFORMANCE_LEVEL, &sretval);
+	if (retval)
+		return retval;
+	return sprintf(buf, "%d\n", sretval.retval[0]);
+}
+
+static ssize_t set_silent_state(struct device *dev,
+				struct device_attribute *attr, const char *buf,
+				size_t count)
+{
+	char value;
+
+	if (count > 1) {
+		value = buf[0];
+		if ((value == '0') || (value == 'n') || (value == 'N')) {
+			/* Turn speed up */
+			sabi_set_command(SET_PERFORMANCE_LEVEL, 0x01);
+		} else if ((value == '1') || (value == 'y') || (value == 'Y')) {
+			/* Turn speed down */
+			sabi_set_command(SET_PERFORMANCE_LEVEL, 0x00);
+		} else {
+			return -EINVAL;
+		}
+	}
+	return count;
+}
+static DEVICE_ATTR(silent, S_IWUGO | S_IRUGO,
+		   get_silent_state, set_silent_state);
+
+
 static int __init dmi_check_cb(const struct dmi_system_id *id)
 {
 	printk(KERN_INFO KBUILD_MODNAME ": found laptop model '%s'\n",
@@ -491,8 +528,15 @@ static int __init samsung_init(void)
 	if (retval)
 		goto error_no_rfk;
 
+	retval = device_create_file(&sdev->dev, &dev_attr_silent);
+	if (retval)
+		goto error_file_create;
+
 exit:
 	return 0;
+
+error_file_create:
+	destroy_wireless();
 
 error_no_rfk:
 	backlight_device_unregister(backlight_device);
@@ -513,6 +557,7 @@ static void __exit samsung_exit(void)
 	/* Turn off "Linux" mode in the BIOS */
 	sabi_set_command(SET_LINUX, 0x80);
 
+	device_remove_file(&sdev->dev, &dev_attr_silent);
 	backlight_device_unregister(backlight_device);
 	destroy_wireless();
 	iounmap(sabi_iface);
