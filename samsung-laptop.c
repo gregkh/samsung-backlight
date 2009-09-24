@@ -344,6 +344,7 @@ static int init_wireless(struct platform_device *sdev)
 	if (!rfk)
 		return -ENOMEM;
 	rfk->toggle_radio = rfkill_set;
+	rfk->name = "samsung-wifi";
 
 	retval = rfkill_register(rfk);
 	if (retval) {
