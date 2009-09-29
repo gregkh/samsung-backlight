@@ -372,7 +372,13 @@ static ssize_t get_silent_state(struct device *dev,
 	retval = sabi_get_command(GET_PERFORMANCE_LEVEL, &sretval);
 	if (retval)
 		return retval;
-	return sprintf(buf, "%d\n", sretval.retval[0]);
+
+	/* The logic is backwards, yeah, lots of fun... */
+	if (sretval.retval[0] == 0)
+		retval = 1;
+	else
+		retval = 0;
+	return sprintf(buf, "%d\n", retval);
 }
 
 static ssize_t set_silent_state(struct device *dev,
@@ -381,7 +387,7 @@ static ssize_t set_silent_state(struct device *dev,
 {
 	char value;
 
-	if (count > 1) {
+	if (count >= 1) {
 		value = buf[0];
 		if ((value == '0') || (value == 'n') || (value == 'N')) {
 			/* Turn speed up */
