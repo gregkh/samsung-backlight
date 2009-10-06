@@ -1,5 +1,5 @@
 /*
- * Samsung N130 and NC120 Laptop driver
+ * Samsung N130 Laptop driver
  *
  * Copyright (C) 2009 Greg Kroah-Hartman (gregkh@suse.de)
  * Copyright (C) 2009 Novell Inc.
@@ -413,6 +413,15 @@ static int __init dmi_check_cb(const struct dmi_system_id *id)
 }
 
 static struct dmi_system_id __initdata samsung_dmi_table[] = {
+	{
+		.ident = "N128",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "N128"),
+			DMI_MATCH(DMI_BOARD_NAME, "N128"),
+		},
+		.callback = dmi_check_cb,
+	},
 	{
 		.ident = "N130",
 		.matches = {
