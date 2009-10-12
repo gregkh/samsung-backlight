@@ -122,9 +122,6 @@ static int sabi_get_command(u8 command, struct sabi_retval *sretval)
 	writeb(0, sabi_iface + SABI_IFACE_COMPLETE);
 	outb(readb(sabi + SABI_HEADER_IFACEFUNC), port);
 
-	/* sleep for a bit to let the command complete */
-	msleep(100);
-
 	/* write protect memory to make it safe */
 	outb(readb(sabi + SABI_HEADER_RE_MEM), port);
 
@@ -172,9 +169,6 @@ static int sabi_set_command(u8 command, u8 data)
 	writeb(0, sabi_iface + SABI_IFACE_COMPLETE);
 	writeb(data, sabi_iface + SABI_IFACE_DATA);
 	outb(readb(sabi + SABI_HEADER_IFACEFUNC), port);
-
-	/* sleep for a bit to let the command complete */
-	msleep(100);
 
 	/* write protect memory to make it safe */
 	outb(readb(sabi + SABI_HEADER_RE_MEM), port);
