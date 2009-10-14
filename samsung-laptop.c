@@ -240,7 +240,7 @@ static u8 read_brightness(void)
 	int user_brightness = 0;
 	int retval;
 
-	retval = sabi_get_command(GET_BACKLIGHT, &sretval);
+	retval = sabi_get_command(GET_BRIGHTNESS, &sretval);
 	if (!retval)
 		user_brightness = sretval.retval[0];
 		if (user_brightness != 0)
