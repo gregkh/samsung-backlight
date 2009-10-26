@@ -255,7 +255,7 @@ static void set_brightness(u8 user_brightness)
 
 static int get_brightness(struct backlight_device *bd)
 {
-	return bd->props.brightness;
+	return (int)read_brightness();
 }
 
 static int update_status(struct backlight_device *bd)
