@@ -127,6 +127,9 @@ static struct dmi_system_id __initdata samsung_dmi_table[] = {
 
 static int __init samsung_init(void)
 {
+	struct backlight_properties props;
+	memset(&props, 0, sizeof(struct backlight_properties));
+
 	if (!dmi_check_system(samsung_dmi_table))
 		return -ENODEV;
 
@@ -145,7 +148,7 @@ static int __init samsung_init(void)
 	/* create a backlight device to talk to this one */
 	backlight_device = backlight_device_register("samsung",
 						     &pci_device->dev,
-						     NULL, &backlight_ops);
+						     NULL, &backlight_ops, &props);
 	if (IS_ERR(backlight_device)) {
 		pci_dev_put(pci_device);
 		return PTR_ERR(backlight_device);
