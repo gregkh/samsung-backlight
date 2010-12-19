@@ -142,7 +142,33 @@ static struct dmi_system_id __initdata samsung_dmi_table[] = {
                 },
                 .callback = dmi_check_cb,
         },
-
+	{
+                .ident = "X360",
+                .matches = {
+                        DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
+                        DMI_MATCH(DMI_PRODUCT_NAME, "X360"),
+                        DMI_MATCH(DMI_BOARD_NAME, "X360"),
+                },
+                .callback = dmi_check_cb,
+        },
+	{
+		.ident = "R518",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "R518"),
+			DMI_MATCH(DMI_BOARD_NAME, "R518"),
+		},
+		.callback = dmi_check_cb,
+	},
+	{
+		.ident = "R510/P510",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "R510/P510"),
+			DMI_MATCH(DMI_BOARD_NAME, "R510/P510"),
+		},
+		.callback = dmi_check_cb,
+	},
 
 	{ },
 };
@@ -157,18 +183,22 @@ static int __init samsung_init(void)
 
 	/*
 	 * The Samsung N120, N130, and NC10 use pci device id 0x27ae, while the
-	 * NP-Q45 uses 0x2a02, and R468/R418/X320/X420/X520 uses 0x2a42.
+	 * NP-Q45 uses 0x2a02
+	 * R468/R418, R518, R510/P510, X320/X420/X520 and X360 uses 0x2a42
+	 * N220 uses 0xa011
 	 * Odds are we might need to add more to the
 	 * list over time...
 	 */
 	pci_device = pci_get_device(PCI_VENDOR_ID_INTEL, 0x27ae, NULL);
-	if (!pci_device) {
+	if (!pci_device) 
 		pci_device = pci_get_device(PCI_VENDOR_ID_INTEL, 0x2a02, NULL);
-		if (!pci_device)
-			pci_device = pci_get_device(PCI_VENDOR_ID_INTEL, 0x2a42, NULL);
-		if (!pci_device)
-			return -ENODEV;
-	}
+	if (!pci_device)
+		pci_device = pci_get_device(PCI_VENDOR_ID_INTEL, 0x2a42, NULL);
+	if (!pci_device)
+                pci_device = pci_get_device(PCI_VENDOR_ID_INTEL, 0xa011, NULL);
+	if (!pci_device)
+		return -ENODEV;
+	
 
 	/* create a backlight device to talk to this one */
 	backlight_device = backlight_device_register("samsung",
@@ -207,3 +237,6 @@ MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnNC10:*:rnNC10:*");
 MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnSQ45S70S:*:rnSQ45S70S:*");
 MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnR468/R418:*:rnR468/R418:*");
 MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnX320/X420/X520:*:rnX320/X420/X520:*");
+MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnX360:*:rnX360:*");
+MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnR518:*:rnR518:*");
+MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnR510/P510:*:rnR510/P510:*");
