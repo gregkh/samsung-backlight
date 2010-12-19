@@ -12,4 +12,5 @@ clean:
 	rm -rf .tmp_versions Modules.symvers
 
 install:
-	cp samsung-backlight.ko /lib/modules/`uname -r`/kernel/drivers/staging/samsung-laptop/	
+	cp samsung-backlight.ko /lib/modules/`uname -r`/kernel/drivers/staging/samsung-laptop/
+	depmod -a

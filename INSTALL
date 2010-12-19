@@ -1,0 +1,7 @@
+Install:
+
+make
+sudo make install 
+echo "samsung_backlight" >> /etc/modules
+
+Then you should reboot.
