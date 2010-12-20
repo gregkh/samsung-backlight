@@ -1,6 +1,6 @@
 /*
- * Samsung N130, NC10, R468/R418, X320/X420/X520, X360, R518 and R510/P510
- * Laptop Backlight driver
+ * Samsung N130, NC10, Np-Q45, R468/R418, X320/X420/X520, X360, R518 and 
+ * R510/P510 Laptop Backlight driver
  *
  * Copyright (C) 2010 xonatius (xonatius@gmail.com)
  * Copyright (C) 2010 elemc, sergem (fedora@conference.jabber.ru)

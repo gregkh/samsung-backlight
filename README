@@ -1,0 +1,40 @@
+## Welcome to the samsung-backlight
+
+samsung-backlight is a fork of samsung-backlight linux kernel driver. It add backlight support for some of samsung laptops.
+
+## Samsung laptop models
+
+Currently supported:
+
+* N130
+* NC10
+* NP-Q45
+* R468/R418
+* X320/X420/X520
+* X360
+* R518
+* R510/P510
+
+Not tested:
+
+* X360
+* R518
+* R510/P510
+
+Have similar problem, but need more information to add it:
+
+* X418
+* Q1
+
+## Installation
+
+git clone https://xonatius@github.com/xonatius/samsung-backlight.git
+cd samsung-backlight
+make
+sudo make install
+
+On some os you need to add samsung_backlight module to modules list. (f.e /etc/modules) After reboot it should work.
+
+## Other samsung laptop models
+
+If you've got samsung laptop with intel graphics card and it hasn't supported backlight control, you could create an issue with "lspci -nn" information.
