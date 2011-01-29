@@ -126,7 +126,7 @@ static struct dmi_system_id __initdata samsung_dmi_table[] = {
                 .callback = dmi_check_cb,
         },
         {
-                .ident = "R410",
+                .ident = "R410 Plus",
                 .matches = {
                         DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
                         DMI_MATCH(DMI_PRODUCT_NAME, "R410P"),
