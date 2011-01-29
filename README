@@ -9,6 +9,7 @@ Currently supported:
 * N130
 * NC10
 * NP-Q45
+* R410 plus
 * R468/R418
 * X320/X420/X520
 * X360
@@ -44,3 +45,4 @@ If you've got samsung laptop with intel graphics card and it hasn't supported ba
 ## Thanks
 
 Thanks nikobockerman for the information and patch for NF110/NF210/NF310 laptops.
+Thanks Alberto Mardegan for R410 laptops patch.

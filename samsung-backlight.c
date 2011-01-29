@@ -1,6 +1,6 @@
 /*
  * Samsung N130, NC10, Np-Q45, R468/R418, X320/X420/X520, X360, R518,
- * R510/P510 and NF110/NF210/NF310 Laptop Backlight driver
+ * R510/P510, R410 and NF110/NF210/NF310 Laptop Backlight driver
  *
  * Copyright (C) 2010 xonatius (xonatius@gmail.com)
  * Copyright (C) 2010 elemc, sergem (fedora@conference.jabber.ru)
@@ -126,6 +126,15 @@ static struct dmi_system_id __initdata samsung_dmi_table[] = {
                 .callback = dmi_check_cb,
         },
         {
+                .ident = "R410",
+                .matches = {
+                        DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
+                        DMI_MATCH(DMI_PRODUCT_NAME, "R410P"),
+                        DMI_MATCH(DMI_BOARD_NAME, "R460"),
+                },
+                .callback = dmi_check_cb,
+        },
+        {
                 .ident = "R468/R418",
                 .matches = {
                         DMI_MATCH(DMI_SYS_VENDOR, "SAMSUNG ELECTRONICS CO., LTD."),
@@ -194,7 +203,7 @@ static int __init samsung_init(void)
         /*
          * The Samsung N120, N130, and NC10 use pci device id 0x27ae, while the
          * NP-Q45 uses 0x2a02
-         * R468/R418, R518, R510/P510, X320/X420/X520 and X360 uses 0x2a42
+         * R410P, R468/R418, R518, R510/P510, X320/X420/X520 and X360 uses 0x2a42
          * N220 and NF110/NF210/NF310 uses 0xa011
          * Odds are we might need to add more to the
          * list over time...
@@ -245,6 +254,7 @@ MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnN120:*:rnN120:*");
 MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnN130:*:rnN130:*");
 MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnNC10:*:rnNC10:*");
 MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnSQ45S70S:*:rnSQ45S70S:*");
+MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnR410P:*:rnR410P:*");
 MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnR468/R418:*:rnR468/R418:*");
 MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnX320/X420/X520:*:rnX320/X420/X520:*");
 MODULE_ALIAS("dmi:*:svnSAMSUNGELECTRONICSCO.,LTD.:pnX360:*:rnX360:*");
