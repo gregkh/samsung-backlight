@@ -23,7 +23,7 @@ Not tested:
 * R518
 * R510/P510
 
-Have a similar problem, but need more information to add it:
+Have a similar problem, but need more information to add it (if you are owner of these laptops, please add an issue):
 
 * X418
 * Q1
@@ -36,6 +36,7 @@ make
 sudo make install
 
 On some os you need to add samsung_backlight module to modules list. (f.e /etc/modules) After reboot it should work.
+Often you need to add acpi_backlight=vendor to the kernel boot options, to makes your system work with backlight. (F.E. In ubuntu you had to edit /etc/default/grub and add the acpi_backlight=vendor to the end of GRUB_CMD_LINUX_DEFAULT line and then run update-grub)
 
 ## Other samsung laptop models
 
@@ -44,5 +45,5 @@ If you've got samsung laptop with intel graphics card and it hasn't supported ba
 
 ## Thanks
 
-Thanks nikobockerman for the information and patch for NF110/NF210/NF310 laptops.
-Thanks Alberto Mardegan for R410 laptops patch.
+* Thanks nikobockerman for the information and patch for NF110/NF210/NF310 laptops.
+* Thanks Alberto Mardegan for R410 laptops patch and solution for acpi_backlight problem.
