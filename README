@@ -1,0 +1,10 @@
+Please use the version of this driver that is in the Linux kernel main
+tree in the drivers/platform/x86/ directory.  It is the latest version,
+and includes all of the needed fixes and supports a wider range of
+devices than this one does.
+
+This repo is just the old history of how the driver was developed
+originally, and is not to be run by anyone on any machines anymore.
+
+If anyone has questions about this, please contact me:
+	Greg Kroah-Hartman <greg@kroah.com>
